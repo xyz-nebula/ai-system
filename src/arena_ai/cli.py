@@ -92,6 +92,26 @@ def main() -> None:
                     print(f"  Следующий шаг: {outcome.next_step}")
                 if outcome.reason:
                     print(f"  Причина: {outcome.reason}")
+                judge_names = {
+                    "hiring": "Нанимающиеся на работу",
+                    "negotiation": "Отправляющие на переговоры",
+                    "ownership": "Доверяющие собственность",
+                }
+                print("Демонстрационные судейские вердикты:")
+                for slot in finished.judge_verdicts:
+                    print(f"  {judge_names[slot.college]}:")
+                    if slot.verdict is None:
+                        print(f"    Вердикт отсутствует ({slot.error_code}).")
+                        continue
+                    verdict = slot.verdict
+                    choice = "Менеджер" if verdict.choice == "player" else "Директор"
+                    print(f"    Выбор: {choice}")
+                    print(
+                        f"    Наблюдение ({verdict.evidence_turn_id}): "
+                        f"«{verdict.evidence_quote}» — {verdict.observation}"
+                    )
+                    print(f"    Эффект: {verdict.effect}")
+                    print(f"    Сравнение: {verdict.comparison}")
                 break
             if user_text == ":history":
                 if not snapshot.transcript:

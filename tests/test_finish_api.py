@@ -105,7 +105,7 @@ async def test_finishing_a_duel_without_a_deal_reports_no_agreement() -> None:
     assert outcome["agreement"] is None
     assert outcome["commitments"] == []
     assert "KPI" in outcome["reason"]
-    assert "judge_verdicts" not in finish.json()
+    assert "score" not in outcome
 
 
 @pytest.mark.anyio

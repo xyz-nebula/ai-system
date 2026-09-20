@@ -20,6 +20,7 @@ from arena_ai.contracts import (
     TurnRequest,
     TurnResponse,
 )
+from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.outcome import determine_outcome
 
 
@@ -151,9 +152,10 @@ def model_failure_response(request: TurnRequest, code: ModelErrorCode) -> TurnRe
     )
 
 
-def create_app(opponent: Opponent | None = None) -> FastAPI:
+def create_app(opponent: Opponent | None = None, judge: Judge | None = None) -> FastAPI:
     app = FastAPI(title="Arena AI", version="0.1.0")
     active_opponent = opponent if opponent is not None else DemoOpponent()
+    active_judge = judge if judge is not None else DemoJudge()
 
     @app.post("/v1/turn", response_model=TurnResponse, response_model_exclude_none=True)
     async def take_turn(request: TurnRequest) -> TurnResponse:
@@ -254,9 +256,11 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
 
     @app.post("/v1/finish", response_model=FinishResponse)
     async def finish_duel(request: FinishRequest) -> FinishResponse:
+        outcome = determine_outcome(request.snapshot)
         return FinishResponse(
             session_id=request.snapshot.session_id,
-            outcome=determine_outcome(request.snapshot),
+            outcome=outcome,
+            judge_verdicts=await judge_duel(request.case, request.snapshot, outcome, active_judge),
         )
 
     return app

@@ -5,6 +5,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
+type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
 
 
 class Contract(BaseModel):
@@ -141,11 +142,6 @@ class OutcomeResult(Contract):
     reason: str | None = None
 
 
-class FinishResponse(Contract):
-    session_id: str
-    outcome: OutcomeResult
-
-
 class OpponentContext(Contract):
     shared_context: str
     opponent_private_context: str
@@ -155,3 +151,47 @@ class OpponentContext(Contract):
     state: SessionState
     transcript: list[TranscriptEntry]
     user_text: str
+
+
+class JudgeContext(Contract):
+    college: JudgeCollege
+    rubric: str
+    case_id: str
+    case_title: str
+    shared_context: str
+    player_role: str
+    opponent_role: str
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    outcome: OutcomeResult
+
+
+class JudgeVerdict(Contract):
+    college: JudgeCollege
+    choice: Literal["player", "opponent"]
+    evidence_turn_id: str
+    evidence_quote: str = Field(min_length=1)
+    observation: str = Field(min_length=1)
+    effect: str = Field(min_length=1)
+    comparison: str = Field(min_length=1)
+
+
+class JudgeSlot(Contract):
+    college: JudgeCollege
+    status: Literal["ready", "failed"]
+    verdict: JudgeVerdict | None = None
+    error_code: Literal["judge_unavailable", "invalid_judge_output"] | None = None
+
+    @model_validator(mode="after")
+    def result_matches_status(self) -> Self:
+        if self.status == "ready" and (self.verdict is None or self.error_code is not None):
+            raise ValueError("ready judge needs one verdict")
+        if self.status == "failed" and (self.verdict is not None or self.error_code is None):
+            raise ValueError("failed judge needs one error code")
+        return self
+
+
+class FinishResponse(Contract):
+    session_id: str
+    outcome: OutcomeResult
+    judge_verdicts: list[JudgeSlot]
