@@ -6,6 +6,8 @@ from typing import Literal, Protocol, Self
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
+
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -27,7 +29,7 @@ class AgreementRules(Contract):
         return self
 
 
-class ScenarioConfig(Contract):
+class CaseConfig(Contract):
     id: str
     title: str
     shared_context: str
@@ -73,7 +75,7 @@ class SessionSnapshot(Contract):
 
 
 class TurnRequest(Contract):
-    scenario: ScenarioConfig
+    case: CaseConfig
     snapshot: SessionSnapshot
     turn_id: str
     user_text: str = Field(min_length=1)
@@ -85,7 +87,7 @@ class TurnResponse(Contract):
     status: Literal["accepted", "blocked", "model_error"]
     opponent_text: str
     snapshot: SessionSnapshot
-    error_code: Literal["invalid_opponent_output", "opponent_unavailable"] | None = None
+    error_code: ModelErrorCode | None = None
 
 
 class OpponentProposal(Contract):
@@ -124,13 +126,25 @@ def guard_blocks(text: str) -> bool:
     return bool(
         re.search(r"(?:игнорируй|ignore).{0,80}(?:инструкц|instructions)", lowered)
         or re.search(r"(?:системн\w*\s+промпт|system\s+prompt)", lowered)
-        or re.search(r"скрыт\w*.{0,30}(?:инструкц|вводн)", lowered)
+        or re.search(
+            r"(?:скрыт\w*|закрыт\w*|секретн\w*|конфиденциальн\w*).{0,80}"
+            r"(?:инструкц|вводн|данн|целе|услов)",
+            lowered,
+        )
+        or re.search(r"переговорн\w*\s+минимум", lowered)
         or "batna" in lowered
     )
 
 
-def valid_proposal(proposal: OpponentProposal, scenario: ScenarioConfig) -> bool:
+def valid_proposal(proposal: OpponentProposal, case: CaseConfig) -> bool:
     text = proposal.text.casefold()
+    if re.search(
+        r"(?:мне\s+(?:предписали|велели)|"
+        r"мо(?:й|и|я)\s+(?:внутренние\s+инструкции|скрытая\s+цель|целевая\s+позиция|целевой\s+вариант)|"
+        r"по\s+моим\s+инструкциям|my\s+instructions|i\s+was\s+instructed)",
+        text,
+    ):
+        return False
     visible_text = " ".join(
         [
             proposal.text,
@@ -138,33 +152,39 @@ def valid_proposal(proposal: OpponentProposal, scenario: ScenarioConfig) -> bool
             *(proposal.agreement.director_commitments if proposal.agreement else []),
         ]
     ).casefold()
-    if (
-        scenario.opponent_private_context
-        and scenario.opponent_private_context.casefold() in visible_text
-    ):
+    if case.opponent_private_context and case.opponent_private_context.casefold() in visible_text:
         return False
-    if (
-        scenario.player_private_context
-        and scenario.player_private_context.casefold() in visible_text
-    ):
+    if case.player_private_context and case.player_private_context.casefold() in visible_text:
         return False
-    if any(
-        phrase.casefold() in visible_text for phrase in scenario.opponent_private_phrases if phrase
-    ):
+    if any(phrase.casefold() in visible_text for phrase in case.opponent_private_phrases if phrase):
         return False
     if proposal.agreement is None:
         return True
     terms = proposal.agreement
-    rules = scenario.agreement_rules
+    rules = case.agreement_rules
     return (
         rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
         and rules.min_kpi_percent <= terms.kpi_percent <= rules.max_kpi_percent
         and (terms.automatic_raise or not rules.require_automatic_raise)
         and not re.search(r"\bне\s+(?:согласен|принимаю)\b", text)
+        and not re.search(r"\bсогласен\s+(?:обсудить|рассмотреть|вернуться)\b", text)
+        and not re.search(r"повышен\w*.{0,40}(?:не\s+обеща|не\s+гарантир|не\s+подтвержд)", text)
         and any(word in text for word in ("согласен", "договорились", "принимаю"))
         and str(terms.kpi_percent) in text
         and "недел" in text
         and "повышен" in text
+        and (not terms.automatic_raise or "автоматич" in text or "без повторного" in text)
+    )
+
+
+def model_failure_response(request: TurnRequest, code: ModelErrorCode) -> TurnResponse:
+    return TurnResponse(
+        session_id=request.snapshot.session_id,
+        turn_id=request.turn_id,
+        status="model_error",
+        opponent_text="Сейчас не могу продолжить разговор. Попробуйте повторить ход.",
+        snapshot=request.snapshot,
+        error_code=code,
     )
 
 
@@ -205,11 +225,11 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
                 snapshot=snapshot,
             )
         context = OpponentContext(
-            shared_context=request.scenario.shared_context,
-            opponent_private_context=request.scenario.opponent_private_context,
-            agreement_rules=request.scenario.agreement_rules,
-            player_role=request.scenario.player_role,
-            opponent_role=request.scenario.opponent_role,
+            shared_context=request.case.shared_context,
+            opponent_private_context=request.case.opponent_private_context,
+            agreement_rules=request.case.agreement_rules,
+            player_role=request.case.player_role,
+            opponent_role=request.case.opponent_role,
             state=request.snapshot.state,
             transcript=[
                 entry.model_copy(update={"text": "[Заблокированная реплика]"})
@@ -222,27 +242,13 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
         try:
             raw_proposal = await active_opponent.respond(context)
         except Exception:  # noqa: BLE001 - isolate any failure of the external model adapter
-            return TurnResponse(
-                session_id=request.snapshot.session_id,
-                turn_id=request.turn_id,
-                status="model_error",
-                opponent_text="Сейчас не могу продолжить разговор. Попробуйте повторить ход.",
-                snapshot=request.snapshot,
-                error_code="opponent_unavailable",
-            )
+            return model_failure_response(request, "opponent_unavailable")
         try:
             proposal = OpponentProposal.model_validate(raw_proposal)
         except ValueError:
             proposal = None
-        if proposal is None or not valid_proposal(proposal, request.scenario):
-            return TurnResponse(
-                session_id=request.snapshot.session_id,
-                turn_id=request.turn_id,
-                status="model_error",
-                opponent_text="Сейчас не могу продолжить разговор. Попробуйте повторить ход.",
-                snapshot=request.snapshot,
-                error_code="invalid_opponent_output",
-            )
+        if proposal is None or not valid_proposal(proposal, request.case):
+            return model_failure_response(request, "invalid_opponent_output")
         snapshot = SessionSnapshot(
             session_id=request.snapshot.session_id,
             state=SessionState(

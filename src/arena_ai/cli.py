@@ -7,7 +7,7 @@ import httpx
 
 from arena_ai.app import SessionSnapshot, SessionState, TurnResponse
 
-DEMO_SCENARIO = {
+DEMO_CASE = {
     "id": "next-day",
     "title": "На следующий день...",
     "shared_context": (
@@ -46,10 +46,10 @@ def main() -> None:
     snapshot = SessionSnapshot(
         session_id=str(uuid4()), state=SessionState(turn_count=0), transcript=[]
     )
-    print(f"Кейс: {DEMO_SCENARIO['title']}")
-    print(f"\nОбщие вводные: {DEMO_SCENARIO['shared_context']}")
-    print(f"\nВаша роль — {DEMO_SCENARIO['player_role']}.")
-    print(f"Ваши вводные: {DEMO_SCENARIO['player_private_context']}")
+    print(f"Кейс: {DEMO_CASE['title']}")
+    print(f"\nОбщие вводные: {DEMO_CASE['shared_context']}")
+    print(f"\nВаша роль — {DEMO_CASE['player_role']}.")
+    print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
     print(
         "\nСейчас оппонент работает в демонстрационном режиме без Qwen. "
         "Введите :history для истории или :quit для выхода."
@@ -79,7 +79,7 @@ def main() -> None:
                 response = client.post(
                     "/v1/turn",
                     json={
-                        "scenario": DEMO_SCENARIO,
+                        "case": DEMO_CASE,
                         "snapshot": snapshot.model_dump(mode="json"),
                         "turn_id": str(uuid4()),
                         "user_text": user_text,
