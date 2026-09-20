@@ -1,6 +1,7 @@
 """Terminal client for exercising the public AI service API."""
 
 import argparse
+import math
 from uuid import uuid4
 
 import httpx
@@ -44,9 +45,21 @@ DEMO_CASE = {
 }
 
 
+def positive_timeout(value: str) -> float:
+    try:
+        seconds = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("Таймаут должен быть числом секунд") from error
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError("Таймаут должен быть положительным")
+    return seconds
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Текстовый демо-клиент AI-контура")
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--turn-timeout", type=positive_timeout, default=210.0)
+    parser.add_argument("--finish-timeout", type=positive_timeout, default=300.0)
     args = parser.parse_args()
 
     snapshot = SessionSnapshot(
@@ -56,7 +69,7 @@ def main() -> None:
     print(f"\nОбщие вводные: {DEMO_CASE['shared_context']}")
     print(f"\nВаша роль — {DEMO_CASE['player_role']}.")
     print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
-    with httpx.Client(base_url=args.api_url, timeout=30.0) as client:
+    with httpx.Client(base_url=args.api_url, timeout=10.0) as client:
         try:
             info_response = client.get("/v1/info")
             info_response.raise_for_status()
@@ -82,6 +95,7 @@ def main() -> None:
                     response = client.post(
                         "/v1/finish",
                         json={"case": DEMO_CASE, "snapshot": snapshot.model_dump(mode="json")},
+                        timeout=args.finish_timeout,
                     )
                     response.raise_for_status()
                     finished = FinishResponse.model_validate(response.json())
@@ -174,6 +188,7 @@ def main() -> None:
                         "turn_id": str(uuid4()),
                         "user_text": user_text,
                     },
+                    timeout=args.turn_timeout,
                 )
                 response.raise_for_status()
                 result = TurnResponse.model_validate(response.json())

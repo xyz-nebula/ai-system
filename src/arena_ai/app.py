@@ -264,12 +264,7 @@ def create_app(
             player_role=request.case.player_role,
             opponent_role=request.case.opponent_role,
             state=request.snapshot.state,
-            transcript=[
-                entry.model_copy(update={"text": "[Заблокированная реплика]"})
-                if entry.status == "blocked"
-                else entry
-                for entry in request.snapshot.transcript
-            ],
+            transcript=public_transcript(request.snapshot.transcript),
             user_text=request.user_text,
         )
         try:
@@ -364,39 +359,18 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
     if mode != "qwen":
         raise ValueError("ARENA_MODEL_MODE must be demo or qwen")
 
-    from arena_ai.qwen import (
-        QwenChatClient,
-        QwenGuard,
-        QwenJudge,
-        QwenOpponent,
-        QwenSettings,
-        QwenTrainer,
-        QwenValidator,
-    )
+    from arena_ai.runtime import build_qwen_runtime
 
-    settings = QwenSettings.from_env()
-    actual_http = model_http if model_http is not None else httpx.AsyncClient(
-        timeout=settings.timeout_seconds
-    )
-    owned_http = actual_http if model_http is None else None
-    chat = QwenChatClient(
-        actual_http,
-        chat_url=settings.chat_url,
-        model=settings.model,
-        api_key=settings.api_key,
-        json_mode=settings.json_mode,
-        fast_extra_body=settings.fast_extra_body,
-        reasoned_extra_body=settings.reasoned_extra_body,
-    )
+    runtime = build_qwen_runtime(model_http)
     return create_app(
-        opponent=QwenOpponent(chat),
-        guard=QwenGuard(chat),
-        validator=QwenValidator(chat),
-        judge=QwenJudge(chat),
-        trainer=QwenTrainer(chat),
-        owned_model_http=owned_http,
+        opponent=runtime.opponent,
+        guard=runtime.guard,
+        validator=runtime.validator,
+        judge=runtime.judge,
+        trainer=runtime.trainer,
+        owned_model_http=runtime.owned_http,
         mode="qwen",
-        model_id=settings.model,
+        model_id=runtime.model_id,
     )
 
 
