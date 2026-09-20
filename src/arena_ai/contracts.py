@@ -4,7 +4,16 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
+type ModelErrorCode = Literal[
+    "invalid_opponent_output",
+    "opponent_unavailable",
+    "guard_unavailable",
+    "invalid_guard_output",
+    "guard_uncertain",
+    "validator_unavailable",
+    "invalid_validator_output",
+    "validator_uncertain",
+]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
 type GuardReason = Literal["prompt_override", "private_data_request", "hidden_position_request"]
 
@@ -155,6 +164,38 @@ class OpponentContext(Contract):
     user_text: str
 
 
+class GuardContext(Contract):
+    shared_context: str
+    player_role: str
+    opponent_role: str
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    user_text: str
+
+
+class GuardDecision(Contract):
+    decision: Literal["allow", "block", "uncertain"]
+    reason: GuardReason | None = None
+
+    @model_validator(mode="after")
+    def reason_matches_decision(self) -> Self:
+        if (self.decision == "block") != (self.reason is not None):
+            raise ValueError("blocked decision requires a reason only when blocked")
+        return self
+
+
+class ValidationContext(Contract):
+    case: CaseConfig
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    user_text: str
+    proposal: OpponentProposal
+
+
+class ValidationDecision(Contract):
+    decision: Literal["accept", "reject", "uncertain"]
+
+
 class JudgeContext(Contract):
     college: JudgeCollege
     rubric: str
@@ -244,3 +285,8 @@ class FinishResponse(Contract):
     outcome: OutcomeResult
     judge_verdicts: list[JudgeSlot]
     trainer_feedback: TrainerSlot
+
+
+class ServiceInfo(Contract):
+    mode: Literal["demo", "qwen"]
+    model: str | None = None

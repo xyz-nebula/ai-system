@@ -5,7 +5,13 @@ from uuid import uuid4
 
 import httpx
 
-from arena_ai.contracts import FinishResponse, SessionSnapshot, SessionState, TurnResponse
+from arena_ai.contracts import (
+    FinishResponse,
+    ServiceInfo,
+    SessionSnapshot,
+    SessionState,
+    TurnResponse,
+)
 
 DEMO_CASE = {
     "id": "next-day",
@@ -50,12 +56,19 @@ def main() -> None:
     print(f"\nОбщие вводные: {DEMO_CASE['shared_context']}")
     print(f"\nВаша роль — {DEMO_CASE['player_role']}.")
     print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
-    print(
-        "\nСейчас оппонент работает в демонстрационном режиме без Qwen. "
-        "Введите :history для истории, :finish для итога или :quit для выхода."
-    )
-
     with httpx.Client(base_url=args.api_url, timeout=30.0) as client:
+        try:
+            info_response = client.get("/v1/info")
+            info_response.raise_for_status()
+            info = ServiceInfo.model_validate(info_response.json())
+        except (httpx.HTTPError, ValueError):
+            print("Не удалось узнать режим AI-сервиса.")
+            return
+        if info.mode == "demo":
+            print("\nРежим: демонстрационные ответы без Qwen.")
+        else:
+            print(f"\nРежим: Qwen ({info.model}).")
+        print("Введите :history для истории, :finish для итога или :quit для выхода.")
         while True:
             try:
                 user_text = input("\nМенеджер > ").strip()
@@ -97,7 +110,11 @@ def main() -> None:
                     "negotiation": "Отправляющие на переговоры",
                     "ownership": "Доверяющие собственность",
                 }
-                print("Демонстрационные судейские вердикты:")
+                print(
+                    "Демонстрационные судейские вердикты:"
+                    if info.mode == "demo"
+                    else "Судейские вердикты:"
+                )
                 for slot in finished.judge_verdicts:
                     print(f"  {judge_names[slot.college]}:")
                     if slot.verdict is None:
@@ -112,7 +129,11 @@ def main() -> None:
                     )
                     print(f"    Эффект: {verdict.effect}")
                     print(f"    Сравнение: {verdict.comparison}")
-                print("Демонстрационный тренерский разбор:")
+                print(
+                    "Демонстрационный тренерский разбор:"
+                    if info.mode == "demo"
+                    else "Тренерский разбор:"
+                )
                 coach = finished.trainer_feedback
                 if coach.feedback is None:
                     print(f"  Разбор отсутствует ({coach.error_code}).")

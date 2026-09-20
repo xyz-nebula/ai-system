@@ -1,8 +1,12 @@
 """HTTP adapter for text turns and duel completion."""
 
+import os
 import re
-from typing import Protocol
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Literal, Protocol
 
+import httpx
 from fastapi import FastAPI, HTTPException
 
 from arena_ai.contracts import (
@@ -10,25 +14,38 @@ from arena_ai.contracts import (
     DeferredDecision,
     FinishRequest,
     FinishResponse,
+    GuardContext,
+    GuardDecision,
     GuardReason,
     ModelErrorCode,
     OpponentContext,
     OpponentProposal,
     PartialDecision,
+    ServiceInfo,
     SessionSnapshot,
     SessionState,
     TranscriptEntry,
     TurnRequest,
     TurnResponse,
+    ValidationContext,
+    ValidationDecision,
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.outcome import determine_outcome
-from arena_ai.privacy import contains_private_phrase
+from arena_ai.privacy import contains_private_phrase, public_transcript
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
 
 
 class Opponent(Protocol):
     async def respond(self, context: OpponentContext) -> object: ...
+
+
+class Guard(Protocol):
+    async def assess(self, context: GuardContext) -> object: ...
+
+
+class ProposalValidator(Protocol):
+    async def assess(self, context: ValidationContext) -> object: ...
 
 
 class DemoOpponent:
@@ -153,15 +170,63 @@ def model_failure_response(request: TurnRequest, code: ModelErrorCode) -> TurnRe
     )
 
 
+def blocked_turn_response(request: TurnRequest, reason: GuardReason) -> TurnResponse:
+    safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
+    snapshot = SessionSnapshot(
+        session_id=request.snapshot.session_id,
+        state=SessionState(turn_count=request.snapshot.state.turn_count + 1),
+        transcript=[
+            *request.snapshot.transcript,
+            TranscriptEntry(
+                turn_id=request.turn_id,
+                speaker="player",
+                status="blocked",
+                text=request.user_text,
+                blocked_reason=reason,
+            ),
+            TranscriptEntry(
+                turn_id=request.turn_id,
+                speaker="opponent",
+                status="safe_reaction",
+                text=safe_text,
+            ),
+        ],
+    )
+    return TurnResponse(
+        session_id=snapshot.session_id,
+        turn_id=request.turn_id,
+        status="blocked",
+        opponent_text=safe_text,
+        snapshot=snapshot,
+    )
+
+
 def create_app(
     opponent: Opponent | None = None,
     judge: Judge | None = None,
     trainer: Trainer | None = None,
+    guard: Guard | None = None,
+    validator: ProposalValidator | None = None,
+    owned_model_http: httpx.AsyncClient | None = None,
+    mode: Literal["demo", "qwen"] = "demo",
+    model_id: str | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Arena AI", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owned_model_http is not None:
+                await owned_model_http.aclose()
+
+    app = FastAPI(title="Arena AI", version="0.1.0", lifespan=lifespan)
     active_opponent = opponent if opponent is not None else DemoOpponent()
     active_judge = judge if judge is not None else DemoJudge()
     active_trainer = trainer if trainer is not None else DemoTrainer()
+
+    @app.get("/v1/info", response_model=ServiceInfo)
+    async def service_info() -> ServiceInfo:
+        return ServiceInfo(mode=mode, model=model_id)
 
     @app.post("/v1/turn", response_model=TurnResponse, response_model_exclude_none=True)
     async def take_turn(request: TurnRequest) -> TurnResponse:
@@ -169,34 +234,29 @@ def create_app(
             raise HTTPException(status_code=409, detail="Duel already has a decision")
         blocked_reason = guard_reason(request.user_text)
         if blocked_reason is not None:
-            safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
-            snapshot = SessionSnapshot(
-                session_id=request.snapshot.session_id,
-                state=SessionState(turn_count=request.snapshot.state.turn_count + 1),
-                transcript=[
-                    *request.snapshot.transcript,
-                    TranscriptEntry(
-                        turn_id=request.turn_id,
-                        speaker="player",
-                        status="blocked",
-                        text=request.user_text,
-                        blocked_reason=blocked_reason,
-                    ),
-                    TranscriptEntry(
-                        turn_id=request.turn_id,
-                        speaker="opponent",
-                        status="safe_reaction",
-                        text=safe_text,
-                    ),
-                ],
+            return blocked_turn_response(request, blocked_reason)
+        if guard is not None:
+            guard_context = GuardContext(
+                shared_context=request.case.shared_context,
+                player_role=request.case.player_role,
+                opponent_role=request.case.opponent_role,
+                state=request.snapshot.state,
+                transcript=public_transcript(request.snapshot.transcript),
+                user_text=request.user_text,
             )
-            return TurnResponse(
-                session_id=snapshot.session_id,
-                turn_id=request.turn_id,
-                status="blocked",
-                opponent_text=safe_text,
-                snapshot=snapshot,
-            )
+            try:
+                raw_guard_decision = await guard.assess(guard_context)
+            except Exception:  # noqa: BLE001 - isolate the external guard call
+                return model_failure_response(request, "guard_unavailable")
+            try:
+                guard_decision = GuardDecision.model_validate(raw_guard_decision)
+            except ValueError:
+                return model_failure_response(request, "invalid_guard_output")
+            if guard_decision.decision == "uncertain":
+                return model_failure_response(request, "guard_uncertain")
+            if guard_decision.decision == "block":
+                assert guard_decision.reason is not None
+                return blocked_turn_response(request, guard_decision.reason)
         context = OpponentContext(
             shared_context=request.case.shared_context,
             opponent_private_context=request.case.opponent_private_context,
@@ -224,6 +284,26 @@ def create_app(
             proposal, request.case, request.user_text, request.snapshot.transcript
         ):
             return model_failure_response(request, "invalid_opponent_output")
+        if validator is not None:
+            validation_context = ValidationContext(
+                case=request.case,
+                state=request.snapshot.state,
+                transcript=public_transcript(request.snapshot.transcript),
+                user_text=request.user_text,
+                proposal=proposal,
+            )
+            try:
+                raw_validation = await validator.assess(validation_context)
+            except Exception:  # noqa: BLE001 - isolate the external validator call
+                return model_failure_response(request, "validator_unavailable")
+            try:
+                validation = ValidationDecision.model_validate(raw_validation)
+            except ValueError:
+                return model_failure_response(request, "invalid_validator_output")
+            if validation.decision == "uncertain":
+                return model_failure_response(request, "validator_uncertain")
+            if validation.decision == "reject":
+                return model_failure_response(request, "invalid_opponent_output")
         snapshot = SessionSnapshot(
             session_id=request.snapshot.session_id,
             state=SessionState(
@@ -277,4 +357,47 @@ def create_app(
     return app
 
 
-app = create_app()
+def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAPI:
+    mode = os.environ.get("ARENA_MODEL_MODE", "demo")
+    if mode == "demo":
+        return create_app()
+    if mode != "qwen":
+        raise ValueError("ARENA_MODEL_MODE must be demo or qwen")
+
+    from arena_ai.qwen import (
+        QwenChatClient,
+        QwenGuard,
+        QwenJudge,
+        QwenOpponent,
+        QwenSettings,
+        QwenTrainer,
+        QwenValidator,
+    )
+
+    settings = QwenSettings.from_env()
+    actual_http = model_http if model_http is not None else httpx.AsyncClient(
+        timeout=settings.timeout_seconds
+    )
+    owned_http = actual_http if model_http is None else None
+    chat = QwenChatClient(
+        actual_http,
+        chat_url=settings.chat_url,
+        model=settings.model,
+        api_key=settings.api_key,
+        json_mode=settings.json_mode,
+        fast_extra_body=settings.fast_extra_body,
+        reasoned_extra_body=settings.reasoned_extra_body,
+    )
+    return create_app(
+        opponent=QwenOpponent(chat),
+        guard=QwenGuard(chat),
+        validator=QwenValidator(chat),
+        judge=QwenJudge(chat),
+        trainer=QwenTrainer(chat),
+        owned_model_http=owned_http,
+        mode="qwen",
+        model_id=settings.model,
+    )
+
+
+app = create_configured_app()

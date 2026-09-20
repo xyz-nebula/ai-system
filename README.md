@@ -38,3 +38,17 @@ uv run pytest
 uv run ruff check src tests
 uv run ty check
 ```
+
+## Подключение Qwen
+
+По умолчанию сервис запускается в демонстрационном режиме. Для endpoint с интерфейсом OpenAI Chat Completions задайте локально:
+
+```bash
+export ARENA_MODEL_MODE=qwen
+export ARENA_QWEN_CHAT_URL='http://HOST:PORT/v1/chat/completions'
+export ARENA_QWEN_MODEL='MODEL_ID'
+```
+
+При необходимости задайте `ARENA_QWEN_API_KEY` в локальном окружении. `ARENA_QWEN_JSON_MODE=json_object` добавляет `response_format: {"type": "json_object"}`; значение по умолчанию `prompt` полагается на инструкцию в запросе. Для переключения reasoning на уровне вызова можно задать JSON-объекты `ARENA_QWEN_FAST_EXTRA_BODY` и `ARENA_QWEN_REASONED_EXTRA_BODY` с параметрами, которые поддерживает конкретный сервер. Таймаут задаёт `ARENA_QWEN_TIMEOUT_SECONDS` (по умолчанию 60). `/v1/info` сообщает текущий режим и идентификатор модели.
+
+Эти параметры транспорта пока не сверены с реальным endpoint Model/Infra. Поддержка JSON-режима и переключения reasoning зависит от сервера. До ручного прогона с зафиксированным Qwen живой AI-срез не считается проверенным. Сервис не возвращает сырой ответ модели при таймауте, сетевой ошибке и неверной JSON-структуре.
