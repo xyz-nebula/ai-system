@@ -1,0 +1,31 @@
+[project]
+name = "arena-ai"
+version = "0.1.0"
+description = "AI service for the Arena negotiation simulator"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.118.3,<1",
+    "httpx>=0.27,<1",
+    "uvicorn>=0.30,<1",
+]
+
+[project.scripts]
+arena-ai = "arena_ai.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "ruff>=0.11,<1",
+    "ty",
+]
+
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
