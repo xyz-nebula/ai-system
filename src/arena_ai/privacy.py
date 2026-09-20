@@ -1,6 +1,12 @@
 """Checks shared by model output boundaries."""
 
-from arena_ai.contracts import CaseConfig, TranscriptEntry
+from arena_ai.contracts import CaseConfig, GuardReason, TranscriptEntry
+
+BLOCKED_SUMMARIES: dict[GuardReason, str] = {
+    "prompt_override": "[Заблокировано: попытка изменить инструкции сервиса]",
+    "private_data_request": "[Заблокировано: запрос закрытых вводных]",
+    "hidden_position_request": "[Заблокировано: запрос скрытой переговорной позиции]",
+}
 
 
 def contains_private_phrase(text: str, case: CaseConfig) -> bool:
@@ -15,7 +21,13 @@ def contains_private_phrase(text: str, case: CaseConfig) -> bool:
 
 def public_transcript(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
     return [
-        entry.model_copy(update={"text": "[Заблокированная реплика пользователя]"})
+        entry.model_copy(
+            update={
+                "text": BLOCKED_SUMMARIES.get(
+                    entry.blocked_reason, "[Заблокированная реплика пользователя]"
+                )
+            }
+        )
         if entry.status == "blocked"
         else entry
         for entry in entries

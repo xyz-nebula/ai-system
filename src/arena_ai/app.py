@@ -10,6 +10,7 @@ from arena_ai.contracts import (
     DeferredDecision,
     FinishRequest,
     FinishResponse,
+    GuardReason,
     ModelErrorCode,
     OpponentContext,
     OpponentProposal,
@@ -41,19 +42,21 @@ class DemoOpponent:
         }
 
 
-def guard_blocks(text: str) -> bool:
+def guard_reason(text: str) -> GuardReason | None:
     lowered = text.casefold()
-    return bool(
-        re.search(r"(?:игнорируй|ignore).{0,80}(?:инструкц|instructions)", lowered)
-        or re.search(r"(?:системн\w*\s+промпт|system\s+prompt)", lowered)
-        or re.search(
-            r"(?:скрыт\w*|закрыт\w*|секретн\w*|конфиденциальн\w*).{0,80}"
-            r"(?:инструкц|вводн|данн|целе|услов)",
-            lowered,
-        )
-        or re.search(r"переговорн\w*\s+минимум", lowered)
-        or "batna" in lowered
-    )
+    if re.search(r"(?:игнорируй|ignore).{0,80}(?:инструкц|instructions)", lowered):
+        return "prompt_override"
+    if re.search(r"(?:системн\w*\s+промпт|system\s+prompt)", lowered):
+        return "prompt_override"
+    if re.search(
+        r"(?:скрыт\w*|закрыт\w*|секретн\w*|конфиденциальн\w*).{0,80}"
+        r"(?:инструкц|вводн|данн|целе|услов)",
+        lowered,
+    ):
+        return "private_data_request"
+    if re.search(r"переговорн\w*\s+минимум", lowered) or "batna" in lowered:
+        return "hidden_position_request"
+    return None
 
 
 def valid_proposal(
@@ -164,7 +167,8 @@ def create_app(
     async def take_turn(request: TurnRequest) -> TurnResponse:
         if request.snapshot.state.stage != "negotiating":
             raise HTTPException(status_code=409, detail="Duel already has a decision")
-        if guard_blocks(request.user_text):
+        blocked_reason = guard_reason(request.user_text)
+        if blocked_reason is not None:
             safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
             snapshot = SessionSnapshot(
                 session_id=request.snapshot.session_id,
@@ -176,6 +180,7 @@ def create_app(
                         speaker="player",
                         status="blocked",
                         text=request.user_text,
+                        blocked_reason=blocked_reason,
                     ),
                     TranscriptEntry(
                         turn_id=request.turn_id,

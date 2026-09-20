@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
+type GuardReason = Literal["prompt_override", "private_data_request", "hidden_position_request"]
 
 
 class Contract(BaseModel):
@@ -91,6 +92,7 @@ class TranscriptEntry(Contract):
     speaker: Literal["player", "opponent"]
     status: Literal["accepted", "blocked", "safe_reaction"]
     text: str
+    blocked_reason: GuardReason | None = None
 
 
 class SessionSnapshot(Contract):
