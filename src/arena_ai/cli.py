@@ -27,6 +27,14 @@ DEMO_SCENARIO = {
         "месяца и KPI 130%; желательная сделка — две недели и KPI 120%. Не соглашаться "
         "на повышение раньше одной контрольной недели."
     ),
+    "opponent_private_phrases": ["желательная сделка", "не соглашаться на повышение"],
+    "agreement_rules": {
+        "min_control_weeks": 1,
+        "max_control_weeks": 4,
+        "min_kpi_percent": 100,
+        "max_kpi_percent": 130,
+        "require_automatic_raise": True,
+    },
 }
 
 
@@ -87,5 +95,17 @@ def main() -> None:
                 continue
 
             snapshot = result.snapshot
+            if result.status == "model_error":
+                print(f"Ход не принят ({result.error_code}): {result.opponent_text}")
+                continue
+            if result.status == "blocked":
+                print("Ход заблокирован Guard.")
             print(f"Директор > {result.opponent_text}")
             print(f"Ходов: {snapshot.state.turn_count}")
+            if snapshot.state.agreement is not None:
+                terms = snapshot.state.agreement
+                print(
+                    "Договорённость: "
+                    f"{terms.control_weeks} нед. контроля, KPI {terms.kpi_percent}%, "
+                    f"автоматическое повышение: {'да' if terms.automatic_raise else 'нет'}"
+                )
