@@ -11,7 +11,7 @@ from arena_ai.contracts import (
     OutcomeResult,
     SessionSnapshot,
 )
-from arena_ai.privacy import contains_private_phrase
+from arena_ai.privacy import contains_private_phrase, public_transcript
 
 COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
 RUBRICS: dict[JudgeCollege, str] = {
@@ -70,12 +70,7 @@ async def judge_duel(
     outcome: OutcomeResult,
     judge: Judge,
 ) -> list[JudgeSlot]:
-    public_transcript = [
-        entry.model_copy(update={"text": "[Заблокированная реплика пользователя]"})
-        if entry.status == "blocked"
-        else entry
-        for entry in snapshot.transcript
-    ]
+    visible_transcript = public_transcript(snapshot.transcript)
     slots: list[JudgeSlot] = []
     for college in COLLEGES:
         context = JudgeContext(
@@ -87,7 +82,7 @@ async def judge_duel(
             player_role=case.player_role,
             opponent_role=case.opponent_role,
             state=snapshot.state,
-            transcript=public_transcript,
+            transcript=visible_transcript,
             outcome=outcome,
         )
         try:

@@ -112,6 +112,26 @@ def main() -> None:
                     )
                     print(f"    Эффект: {verdict.effect}")
                     print(f"    Сравнение: {verdict.comparison}")
+                print("Демонстрационный тренерский разбор:")
+                coach = finished.trainer_feedback
+                if coach.feedback is None:
+                    print(f"  Разбор отсутствует ({coach.error_code}).")
+                else:
+                    feedback = coach.feedback
+                    print(f"  {feedback.summary}")
+                    for label, points in (
+                        ("Сильный момент", feedback.strengths),
+                        ("Ошибка", feedback.mistakes),
+                    ):
+                        for point in points:
+                            print(
+                                f"  {label} ({point.evidence_turn_id}): "
+                                f"«{point.evidence_quote}» — {point.action}"
+                            )
+                            print(f"    Изменение: {point.situation_change}")
+                            print(f"    Последствие: {point.consequence}")
+                    for recommendation in feedback.next_try:
+                        print(f"  Следующая попытка: {recommendation}")
                 break
             if user_text == ":history":
                 if not snapshot.transcript:

@@ -191,7 +191,54 @@ class JudgeSlot(Contract):
         return self
 
 
+class TrainerContext(Contract):
+    case_id: str
+    case_title: str
+    shared_context: str
+    player_role: str
+    opponent_role: str
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    outcome: OutcomeResult
+
+
+class CoachingPoint(Contract):
+    evidence_turn_id: str
+    evidence_quote: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+    situation_change: str = Field(min_length=1)
+    consequence: str = Field(min_length=1)
+
+
+class TrainerFeedback(Contract):
+    summary: str = Field(min_length=1)
+    strengths: list[CoachingPoint] = Field(default_factory=list)
+    mistakes: list[CoachingPoint] = Field(default_factory=list)
+    next_try: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def has_observed_episode(self) -> Self:
+        if not self.strengths and not self.mistakes:
+            raise ValueError("trainer feedback needs an observed episode")
+        return self
+
+
+class TrainerSlot(Contract):
+    status: Literal["ready", "failed"]
+    feedback: TrainerFeedback | None = None
+    error_code: Literal["trainer_unavailable", "invalid_trainer_output"] | None = None
+
+    @model_validator(mode="after")
+    def result_matches_status(self) -> Self:
+        if self.status == "ready" and (self.feedback is None or self.error_code is not None):
+            raise ValueError("ready trainer needs feedback")
+        if self.status == "failed" and (self.feedback is not None or self.error_code is None):
+            raise ValueError("failed trainer needs one error code")
+        return self
+
+
 class FinishResponse(Contract):
     session_id: str
     outcome: OutcomeResult
     judge_verdicts: list[JudgeSlot]
+    trainer_feedback: TrainerSlot

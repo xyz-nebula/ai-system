@@ -23,6 +23,7 @@ from arena_ai.contracts import (
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.outcome import determine_outcome
 from arena_ai.privacy import contains_private_phrase
+from arena_ai.trainer import DemoTrainer, Trainer, train_duel
 
 
 class Opponent(Protocol):
@@ -149,10 +150,15 @@ def model_failure_response(request: TurnRequest, code: ModelErrorCode) -> TurnRe
     )
 
 
-def create_app(opponent: Opponent | None = None, judge: Judge | None = None) -> FastAPI:
+def create_app(
+    opponent: Opponent | None = None,
+    judge: Judge | None = None,
+    trainer: Trainer | None = None,
+) -> FastAPI:
     app = FastAPI(title="Arena AI", version="0.1.0")
     active_opponent = opponent if opponent is not None else DemoOpponent()
     active_judge = judge if judge is not None else DemoJudge()
+    active_trainer = trainer if trainer is not None else DemoTrainer()
 
     @app.post("/v1/turn", response_model=TurnResponse, response_model_exclude_none=True)
     async def take_turn(request: TurnRequest) -> TurnResponse:
@@ -260,6 +266,7 @@ def create_app(opponent: Opponent | None = None, judge: Judge | None = None) -> 
             session_id=request.snapshot.session_id,
             outcome=outcome,
             judge_verdicts=await judge_duel(request.case, request.snapshot, outcome, active_judge),
+            trainer_feedback=await train_duel(request.case, request.snapshot, outcome, active_trainer),
         )
 
     return app
