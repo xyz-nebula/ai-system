@@ -1,0 +1,157 @@
+"""Contracts for text turns and factual duel outcomes."""
+
+from typing import Literal, Self
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
+
+
+class Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class AgreementRules(Contract):
+    min_control_weeks: int = Field(default=1, ge=0)
+    max_control_weeks: int = Field(default=4, ge=0)
+    min_kpi_percent: int = Field(default=100, ge=0)
+    max_kpi_percent: int = Field(default=130, ge=0)
+    require_automatic_raise: bool = True
+
+    @model_validator(mode="after")
+    def bounds_are_consistent(self) -> Self:
+        if self.min_control_weeks > self.max_control_weeks:
+            raise ValueError("control-week bounds are reversed")
+        if self.min_kpi_percent > self.max_kpi_percent:
+            raise ValueError("KPI bounds are reversed")
+        return self
+
+
+class CaseConfig(Contract):
+    id: str
+    title: str
+    shared_context: str
+    player_role: str
+    opponent_role: str
+    player_private_context: str
+    opponent_private_context: str
+    agreement_rules: AgreementRules = Field(default_factory=AgreementRules)
+    opponent_private_phrases: list[str] = Field(default_factory=list)
+
+
+class DealTerms(Contract):
+    control_weeks: int = Field(ge=0)
+    kpi_percent: int = Field(ge=0)
+    automatic_raise: bool
+    employee_commitments: list[str] = Field(min_length=1)
+    director_commitments: list[str] = Field(min_length=1)
+
+
+class PartialDecision(Contract):
+    kind: Literal["partial_agreement"]
+    commitments: list[str] = Field(min_length=1)
+    open_points: list[str] = Field(min_length=1)
+
+
+class DeferredDecision(Contract):
+    kind: Literal["deferred"]
+    reason: str = Field(min_length=1)
+    next_step: str = Field(min_length=1)
+
+
+type InterimDecision = PartialDecision | DeferredDecision
+
+
+class SessionState(Contract):
+    turn_count: int = Field(ge=0)
+    stage: Literal["negotiating", "agreed", "partial_agreement", "deferred"] = "negotiating"
+    agreement: DealTerms | None = None
+    decision: InterimDecision | None = None
+
+    @model_validator(mode="after")
+    def agreement_matches_stage(self) -> Self:
+        if self.stage == "agreed":
+            if self.agreement is None or self.decision is not None:
+                raise ValueError("agreement and stage disagree")
+        elif self.stage in ("partial_agreement", "deferred"):
+            if (
+                self.agreement is not None
+                or self.decision is None
+                or self.decision.kind != self.stage
+            ):
+                raise ValueError("decision and stage disagree")
+        elif self.agreement is not None or self.decision is not None:
+            raise ValueError("negotiating stage cannot have a decision")
+        return self
+
+
+class TranscriptEntry(Contract):
+    turn_id: str
+    speaker: Literal["player", "opponent"]
+    status: Literal["accepted", "blocked", "safe_reaction"]
+    text: str
+
+
+class SessionSnapshot(Contract):
+    session_id: str
+    state: SessionState
+    transcript: list[TranscriptEntry]
+
+
+class TurnRequest(Contract):
+    case: CaseConfig
+    snapshot: SessionSnapshot
+    turn_id: str
+    user_text: str = Field(min_length=1)
+
+
+class TurnResponse(Contract):
+    session_id: str
+    turn_id: str
+    status: Literal["accepted", "blocked", "model_error"]
+    opponent_text: str
+    snapshot: SessionSnapshot
+    error_code: ModelErrorCode | None = None
+
+
+class OpponentProposal(Contract):
+    text: str = Field(min_length=1)
+    agreement: DealTerms | None = None
+    decision: InterimDecision | None = None
+
+    @model_validator(mode="after")
+    def one_resolution_only(self) -> Self:
+        if self.agreement is not None and self.decision is not None:
+            raise ValueError("opponent proposed two resolutions")
+        return self
+
+
+class FinishRequest(Contract):
+    case: CaseConfig
+    snapshot: SessionSnapshot
+
+
+class OutcomeResult(Contract):
+    kind: Literal["agreement", "partial_agreement", "deferred", "no_agreement"]
+    summary: str
+    agreement: DealTerms | None = None
+    commitments: list[str] = Field(default_factory=list)
+    open_points: list[str] = Field(default_factory=list)
+    next_step: str | None = None
+    reason: str | None = None
+
+
+class FinishResponse(Contract):
+    session_id: str
+    outcome: OutcomeResult
+
+
+class OpponentContext(Contract):
+    shared_context: str
+    opponent_private_context: str
+    agreement_rules: AgreementRules
+    player_role: str
+    opponent_role: str
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    user_text: str

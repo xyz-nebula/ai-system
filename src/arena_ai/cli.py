@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import httpx
 
-from arena_ai.app import FinishResponse, SessionSnapshot, SessionState, TurnResponse
+from arena_ai.contracts import FinishResponse, SessionSnapshot, SessionState, TurnResponse
 
 DEMO_CASE = {
     "id": "next-day",
@@ -77,12 +77,21 @@ def main() -> None:
                     continue
                 outcome = finished.outcome
                 print(f"Исход ({outcome.kind}): {outcome.summary}")
+                if outcome.agreement is not None:
+                    terms = outcome.agreement
+                    print(
+                        "  Условия: "
+                        f"{terms.control_weeks} нед. контроля, KPI {terms.kpi_percent}%, "
+                        f"автоматическое повышение: {'да' if terms.automatic_raise else 'нет'}"
+                    )
                 for commitment in outcome.commitments:
                     print(f"  Обязательство: {commitment}")
                 for point in outcome.open_points:
                     print(f"  Открытый вопрос: {point}")
                 if outcome.next_step:
                     print(f"  Следующий шаг: {outcome.next_step}")
+                if outcome.reason:
+                    print(f"  Причина: {outcome.reason}")
                 break
             if user_text == ":history":
                 if not snapshot.transcript:

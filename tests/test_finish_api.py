@@ -1,7 +1,18 @@
 import httpx
 import pytest
 
-from arena_ai.app import OpponentContext, create_app
+from arena_ai.app import create_app
+from arena_ai.contracts import OpponentContext
+
+CASE = {
+    "id": "next-day",
+    "title": "На следующий день...",
+    "shared_context": "Повышение после пропущенного дня.",
+    "player_role": "Менеджер",
+    "opponent_role": "Генеральный директор",
+    "player_private_context": "Сохранить договорённость о повышении.",
+    "opponent_private_context": "Добиться подтверждения ответственности.",
+}
 
 
 class DealOpponent:
@@ -65,15 +76,7 @@ def anyio_backend() -> str:
 
 @pytest.mark.anyio
 async def test_finishing_a_duel_without_a_deal_reports_no_agreement() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Менеджер и директор обсуждают повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Сохранить договорённость.",
-        "opponent_private_context": "Минимум одна контрольная неделя.",
-    }
+    case = CASE
     app = create_app()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -101,20 +104,13 @@ async def test_finishing_a_duel_without_a_deal_reports_no_agreement() -> None:
     assert outcome["kind"] == "no_agreement"
     assert outcome["agreement"] is None
     assert outcome["commitments"] == []
+    assert "KPI" in outcome["reason"]
     assert "judge_verdicts" not in finish.json()
 
 
 @pytest.mark.anyio
 async def test_finished_agreement_reports_both_sides_commitments_without_skill_score() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропущенного дня.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Не больше месяца контроля.",
-        "opponent_private_context": "Не меньше недели контроля.",
-    }
+    case = CASE
     app = create_app(opponent=DealOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -152,15 +148,7 @@ async def test_finished_agreement_reports_both_sides_commitments_without_skill_s
 
 @pytest.mark.anyio
 async def test_finish_reports_partial_agreement_and_open_points() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     app = create_app(opponent=PartialOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -193,15 +181,7 @@ async def test_finish_reports_partial_agreement_and_open_points() -> None:
 
 @pytest.mark.anyio
 async def test_finish_reports_deferral_and_next_step() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     app = create_app(opponent=DeferringOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -233,15 +213,7 @@ async def test_finish_reports_deferral_and_next_step() -> None:
 
 @pytest.mark.anyio
 async def test_opponent_cannot_record_agreement_without_player_offer_or_assent() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     app = create_app(opponent=DealOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -267,15 +239,7 @@ async def test_opponent_cannot_record_agreement_without_player_offer_or_assent()
 
 @pytest.mark.anyio
 async def test_opponent_cannot_unilaterally_record_partial_or_deferred_decision() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     for opponent, user_text in [
         (PartialOpponent(), "Компенсировать пропуск не буду."),
         (DeferringOpponent(), "Не хочу откладывать решение."),
@@ -305,15 +269,7 @@ async def test_opponent_cannot_unilaterally_record_partial_or_deferred_decision(
 
 @pytest.mark.anyio
 async def test_bare_assent_without_any_offer_does_not_create_an_agreement() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     app = create_app(opponent=DealOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -338,15 +294,7 @@ async def test_bare_assent_without_any_offer_does_not_create_an_agreement() -> N
 
 @pytest.mark.anyio
 async def test_player_can_accept_terms_from_a_previous_opponent_offer() -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Повышение после пропуска.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "Хочу сохранить договорённость.",
-        "opponent_private_context": "Хочу дополнительных гарантий.",
-    }
+    case = CASE
     app = create_app(opponent=OfferThenDealOpponent())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -378,3 +326,28 @@ async def test_player_can_accept_terms_from_a_previous_opponent_offer() -> None:
     assert second.status_code == 200
     assert second.json()["status"] == "accepted"
     assert second.json()["snapshot"]["state"]["stage"] == "agreed"
+
+
+@pytest.mark.anyio
+async def test_vague_offer_cannot_become_specific_agreement() -> None:
+    case = CASE
+    app = create_app(opponent=DealOpponent())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        turn = await client.post(
+            "/v1/turn",
+            json={
+                "case": case,
+                "snapshot": {
+                    "session_id": "demo-vague",
+                    "state": {"turn_count": 0},
+                    "transcript": [],
+                },
+                "turn_id": "turn-1",
+                "user_text": "Предлагаю обсудить это через год, условия пока не называю.",
+            },
+        )
+
+    assert turn.status_code == 200
+    assert turn.json()["status"] == "model_error"

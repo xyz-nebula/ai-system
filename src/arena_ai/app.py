@@ -1,161 +1,26 @@
-"""HTTP boundary for a single text turn of a negotiation duel."""
+"""HTTP adapter for text turns and duel completion."""
 
 import re
-from typing import Literal, Protocol, Self
+from typing import Protocol
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-type ModelErrorCode = Literal["invalid_opponent_output", "opponent_unavailable"]
-
-
-class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class AgreementRules(Contract):
-    min_control_weeks: int = Field(default=1, ge=0)
-    max_control_weeks: int = Field(default=4, ge=0)
-    min_kpi_percent: int = Field(default=100, ge=0)
-    max_kpi_percent: int = Field(default=130, ge=0)
-    require_automatic_raise: bool = True
-
-    @model_validator(mode="after")
-    def bounds_are_consistent(self) -> Self:
-        if self.min_control_weeks > self.max_control_weeks:
-            raise ValueError("control-week bounds are reversed")
-        if self.min_kpi_percent > self.max_kpi_percent:
-            raise ValueError("KPI bounds are reversed")
-        return self
-
-
-class CaseConfig(Contract):
-    id: str
-    title: str
-    shared_context: str
-    player_role: str
-    opponent_role: str
-    player_private_context: str
-    opponent_private_context: str
-    agreement_rules: AgreementRules = Field(default_factory=AgreementRules)
-    opponent_private_phrases: list[str] = Field(default_factory=list)
-
-
-class DealTerms(Contract):
-    control_weeks: int = Field(ge=0)
-    kpi_percent: int = Field(ge=0)
-    automatic_raise: bool
-    employee_commitments: list[str] = Field(min_length=1)
-    director_commitments: list[str] = Field(min_length=1)
-
-
-class PartialDecision(Contract):
-    kind: Literal["partial_agreement"]
-    commitments: list[str] = Field(min_length=1)
-    open_points: list[str] = Field(min_length=1)
-
-
-class DeferredDecision(Contract):
-    kind: Literal["deferred"]
-    reason: str = Field(min_length=1)
-    next_step: str = Field(min_length=1)
-
-
-type InterimDecision = PartialDecision | DeferredDecision
-
-
-class SessionState(Contract):
-    turn_count: int = Field(ge=0)
-    stage: Literal["negotiating", "agreed", "partial_agreement", "deferred"] = "negotiating"
-    agreement: DealTerms | None = None
-    decision: InterimDecision | None = None
-
-    @model_validator(mode="after")
-    def agreement_matches_stage(self) -> Self:
-        if self.stage == "agreed":
-            if self.agreement is None or self.decision is not None:
-                raise ValueError("agreement and stage disagree")
-        elif self.stage in ("partial_agreement", "deferred"):
-            if (
-                self.agreement is not None
-                or self.decision is None
-                or self.decision.kind != self.stage
-            ):
-                raise ValueError("decision and stage disagree")
-        elif self.agreement is not None or self.decision is not None:
-            raise ValueError("negotiating stage cannot have a decision")
-        return self
-
-
-class TranscriptEntry(Contract):
-    turn_id: str
-    speaker: Literal["player", "opponent"]
-    status: Literal["accepted", "blocked", "safe_reaction"]
-    text: str
-
-
-class SessionSnapshot(Contract):
-    session_id: str
-    state: SessionState
-    transcript: list[TranscriptEntry]
-
-
-class TurnRequest(Contract):
-    case: CaseConfig
-    snapshot: SessionSnapshot
-    turn_id: str
-    user_text: str = Field(min_length=1)
-
-
-class TurnResponse(Contract):
-    session_id: str
-    turn_id: str
-    status: Literal["accepted", "blocked", "model_error"]
-    opponent_text: str
-    snapshot: SessionSnapshot
-    error_code: ModelErrorCode | None = None
-
-
-class OpponentProposal(Contract):
-    text: str = Field(min_length=1)
-    agreement: DealTerms | None = None
-    decision: InterimDecision | None = None
-
-    @model_validator(mode="after")
-    def one_resolution_only(self) -> Self:
-        if self.agreement is not None and self.decision is not None:
-            raise ValueError("opponent proposed two resolutions")
-        return self
-
-
-class FinishRequest(Contract):
-    case: CaseConfig
-    snapshot: SessionSnapshot
-
-
-class OutcomeResult(Contract):
-    kind: Literal["agreement", "partial_agreement", "deferred", "no_agreement"]
-    summary: str
-    agreement: DealTerms | None = None
-    commitments: list[str] = Field(default_factory=list)
-    open_points: list[str] = Field(default_factory=list)
-    next_step: str | None = None
-
-
-class FinishResponse(Contract):
-    session_id: str
-    outcome: OutcomeResult
-
-
-class OpponentContext(Contract):
-    shared_context: str
-    opponent_private_context: str
-    agreement_rules: AgreementRules
-    player_role: str
-    opponent_role: str
-    state: SessionState
-    transcript: list[TranscriptEntry]
-    user_text: str
+from arena_ai.contracts import (
+    CaseConfig,
+    DeferredDecision,
+    FinishRequest,
+    FinishResponse,
+    ModelErrorCode,
+    OpponentContext,
+    OpponentProposal,
+    PartialDecision,
+    SessionSnapshot,
+    SessionState,
+    TranscriptEntry,
+    TurnRequest,
+    TurnResponse,
+)
+from arena_ai.outcome import determine_outcome
 
 
 class Opponent(Protocol):
@@ -258,8 +123,7 @@ def valid_proposal(
     return (
         not re.search(r"\bне\s+(?:готов|согласен|принимаю)\b|\bотказываюсь\b", player_text)
         and (
-            "предлага" in player_text
-            or (str(terms.kpi_percent) in player_text and "недел" in player_text)
+            (str(terms.kpi_percent) in player_text and "недел" in player_text)
             or ("согласен" in player_text and prior_offer)
         )
         and rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
@@ -390,40 +254,9 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
 
     @app.post("/v1/finish", response_model=FinishResponse)
     async def finish_duel(request: FinishRequest) -> FinishResponse:
-        agreement = request.snapshot.state.agreement
-        if agreement is not None:
-            outcome = OutcomeResult(
-                kind="agreement",
-                summary="Стороны согласовали условия повышения после контрольного периода.",
-                agreement=agreement,
-                commitments=[
-                    *agreement.employee_commitments,
-                    *agreement.director_commitments,
-                ],
-            )
-        elif isinstance(request.snapshot.state.decision, PartialDecision):
-            decision = request.snapshot.state.decision
-            outcome = OutcomeResult(
-                kind="partial_agreement",
-                summary="Стороны зафиксировали часть обязательств, но условия повышения остались открытыми.",
-                commitments=decision.commitments,
-                open_points=decision.open_points,
-            )
-        elif isinstance(request.snapshot.state.decision, DeferredDecision):
-            decision = request.snapshot.state.decision
-            outcome = OutcomeResult(
-                kind="deferred",
-                summary=f"Решение отложено: {decision.reason}",
-                next_step=decision.next_step,
-            )
-        else:
-            outcome = OutcomeResult(
-                kind="no_agreement",
-                summary="К моменту завершения разговора договорённость не зафиксирована.",
-            )
         return FinishResponse(
             session_id=request.snapshot.session_id,
-            outcome=outcome,
+            outcome=determine_outcome(request.snapshot),
         )
 
     return app
