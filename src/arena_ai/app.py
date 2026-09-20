@@ -22,6 +22,7 @@ from arena_ai.contracts import (
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.outcome import determine_outcome
+from arena_ai.privacy import contains_private_phrase
 
 
 class Opponent(Protocol):
@@ -90,12 +91,8 @@ def valid_proposal(
                 else []
             ),
         ]
-    ).casefold()
-    if case.opponent_private_context and case.opponent_private_context.casefold() in visible_text:
-        return False
-    if case.player_private_context and case.player_private_context.casefold() in visible_text:
-        return False
-    if any(phrase.casefold() in visible_text for phrase in case.opponent_private_phrases if phrase):
+    )
+    if contains_private_phrase(visible_text, case):
         return False
     if isinstance(proposal.decision, PartialDecision):
         return (
@@ -256,6 +253,8 @@ def create_app(opponent: Opponent | None = None, judge: Judge | None = None) -> 
 
     @app.post("/v1/finish", response_model=FinishResponse)
     async def finish_duel(request: FinishRequest) -> FinishResponse:
+        if not any(entry.status == "accepted" for entry in request.snapshot.transcript):
+            raise HTTPException(status_code=409, detail="Duel has no accepted turns")
         outcome = determine_outcome(request.snapshot)
         return FinishResponse(
             session_id=request.snapshot.session_id,

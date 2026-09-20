@@ -11,6 +11,7 @@ from arena_ai.contracts import (
     OutcomeResult,
     SessionSnapshot,
 )
+from arena_ai.privacy import contains_private_phrase
 
 COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
 RUBRICS: dict[JudgeCollege, str] = {
@@ -59,15 +60,8 @@ def verdict_is_grounded(verdict: JudgeVerdict, context: JudgeContext, case: Case
         for entry in context.transcript
     ):
         return False
-    visible_text = (
-        f"{verdict.evidence_quote} {verdict.observation} {verdict.effect} {verdict.comparison}"
-    ).casefold()
-    private_phrases = (
-        case.player_private_context,
-        case.opponent_private_context,
-        *case.opponent_private_phrases,
-    )
-    return not any(phrase.casefold() in visible_text for phrase in private_phrases if phrase)
+    visible_text = f"{verdict.evidence_quote} {verdict.observation} {verdict.effect} {verdict.comparison}"
+    return not contains_private_phrase(visible_text, case)
 
 
 async def judge_duel(

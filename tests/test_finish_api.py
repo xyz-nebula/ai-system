@@ -75,6 +75,27 @@ def anyio_backend() -> str:
 
 
 @pytest.mark.anyio
+async def test_finish_requires_an_accepted_turn_for_judge_evidence() -> None:
+    app = create_app()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={
+                "case": CASE,
+                "snapshot": {
+                    "session_id": "empty-duel",
+                    "state": {"turn_count": 0},
+                    "transcript": [],
+                },
+            },
+        )
+
+    assert response.status_code == 409
+
+
+@pytest.mark.anyio
 async def test_finishing_a_duel_without_a_deal_reports_no_agreement() -> None:
     case = CASE
     app = create_app()
