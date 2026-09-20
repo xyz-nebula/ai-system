@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import httpx
 
-from arena_ai.app import SessionSnapshot, SessionState, TurnResponse
+from arena_ai.app import FinishResponse, SessionSnapshot, SessionState, TurnResponse
 
 DEMO_CASE = {
     "id": "next-day",
@@ -52,7 +52,7 @@ def main() -> None:
     print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
     print(
         "\nСейчас оппонент работает в демонстрационном режиме без Qwen. "
-        "Введите :history для истории или :quit для выхода."
+        "Введите :history для истории, :finish для итога или :quit для выхода."
     )
 
     with httpx.Client(base_url=args.api_url, timeout=30.0) as client:
@@ -63,6 +63,26 @@ def main() -> None:
                 print()
                 break
             if user_text == ":quit":
+                break
+            if user_text == ":finish":
+                try:
+                    response = client.post(
+                        "/v1/finish",
+                        json={"case": DEMO_CASE, "snapshot": snapshot.model_dump(mode="json")},
+                    )
+                    response.raise_for_status()
+                    finished = FinishResponse.model_validate(response.json())
+                except (httpx.HTTPError, ValueError):
+                    print("Не удалось получить итог поединка.")
+                    continue
+                outcome = finished.outcome
+                print(f"Исход ({outcome.kind}): {outcome.summary}")
+                for commitment in outcome.commitments:
+                    print(f"  Обязательство: {commitment}")
+                for point in outcome.open_points:
+                    print(f"  Открытый вопрос: {point}")
+                if outcome.next_step:
+                    print(f"  Следующий шаг: {outcome.next_step}")
                 break
             if user_text == ":history":
                 if not snapshot.transcript:

@@ -49,15 +49,41 @@ class DealTerms(Contract):
     director_commitments: list[str] = Field(min_length=1)
 
 
+class PartialDecision(Contract):
+    kind: Literal["partial_agreement"]
+    commitments: list[str] = Field(min_length=1)
+    open_points: list[str] = Field(min_length=1)
+
+
+class DeferredDecision(Contract):
+    kind: Literal["deferred"]
+    reason: str = Field(min_length=1)
+    next_step: str = Field(min_length=1)
+
+
+type InterimDecision = PartialDecision | DeferredDecision
+
+
 class SessionState(Contract):
     turn_count: int = Field(ge=0)
-    stage: Literal["negotiating", "agreed"] = "negotiating"
+    stage: Literal["negotiating", "agreed", "partial_agreement", "deferred"] = "negotiating"
     agreement: DealTerms | None = None
+    decision: InterimDecision | None = None
 
     @model_validator(mode="after")
     def agreement_matches_stage(self) -> Self:
-        if (self.stage == "agreed") != (self.agreement is not None):
-            raise ValueError("agreement and stage disagree")
+        if self.stage == "agreed":
+            if self.agreement is None or self.decision is not None:
+                raise ValueError("agreement and stage disagree")
+        elif self.stage in ("partial_agreement", "deferred"):
+            if (
+                self.agreement is not None
+                or self.decision is None
+                or self.decision.kind != self.stage
+            ):
+                raise ValueError("decision and stage disagree")
+        elif self.agreement is not None or self.decision is not None:
+            raise ValueError("negotiating stage cannot have a decision")
         return self
 
 
@@ -93,6 +119,32 @@ class TurnResponse(Contract):
 class OpponentProposal(Contract):
     text: str = Field(min_length=1)
     agreement: DealTerms | None = None
+    decision: InterimDecision | None = None
+
+    @model_validator(mode="after")
+    def one_resolution_only(self) -> Self:
+        if self.agreement is not None and self.decision is not None:
+            raise ValueError("opponent proposed two resolutions")
+        return self
+
+
+class FinishRequest(Contract):
+    case: CaseConfig
+    snapshot: SessionSnapshot
+
+
+class OutcomeResult(Contract):
+    kind: Literal["agreement", "partial_agreement", "deferred", "no_agreement"]
+    summary: str
+    agreement: DealTerms | None = None
+    commitments: list[str] = Field(default_factory=list)
+    open_points: list[str] = Field(default_factory=list)
+    next_step: str | None = None
+
+
+class FinishResponse(Contract):
+    session_id: str
+    outcome: OutcomeResult
 
 
 class OpponentContext(Contract):
@@ -136,8 +188,14 @@ def guard_blocks(text: str) -> bool:
     )
 
 
-def valid_proposal(proposal: OpponentProposal, case: CaseConfig) -> bool:
+def valid_proposal(
+    proposal: OpponentProposal,
+    case: CaseConfig,
+    user_text: str,
+    transcript: list[TranscriptEntry],
+) -> bool:
     text = proposal.text.casefold()
+    player_text = user_text.casefold()
     if re.search(
         r"(?:мне\s+(?:предписали|велели)|"
         r"мо(?:й|и|я)\s+(?:внутренние\s+инструкции|скрытая\s+цель|целевая\s+позиция|целевой\s+вариант)|"
@@ -150,6 +208,21 @@ def valid_proposal(proposal: OpponentProposal, case: CaseConfig) -> bool:
             proposal.text,
             *(proposal.agreement.employee_commitments if proposal.agreement else []),
             *(proposal.agreement.director_commitments if proposal.agreement else []),
+            *(
+                proposal.decision.commitments
+                if isinstance(proposal.decision, PartialDecision)
+                else []
+            ),
+            *(
+                proposal.decision.open_points
+                if isinstance(proposal.decision, PartialDecision)
+                else []
+            ),
+            *(
+                [proposal.decision.reason, proposal.decision.next_step]
+                if isinstance(proposal.decision, DeferredDecision)
+                else []
+            ),
         ]
     ).casefold()
     if case.opponent_private_context and case.opponent_private_context.casefold() in visible_text:
@@ -158,12 +231,38 @@ def valid_proposal(proposal: OpponentProposal, case: CaseConfig) -> bool:
         return False
     if any(phrase.casefold() in visible_text for phrase in case.opponent_private_phrases if phrase):
         return False
+    if isinstance(proposal.decision, PartialDecision):
+        return (
+            "соглас" in text
+            and any(word in text for word in ("открыт", "остал", "пока"))
+            and not re.search(r"\bне\s+(?:буду|готов|согласен)\b", player_text)
+            and any(word in player_text for word in ("готов", "соглас", "предлага"))
+        )
+    if isinstance(proposal.decision, DeferredDecision):
+        return (
+            any(word in text for word in ("верн", "отлож", "перенес"))
+            and not re.search(r"\bне\s+(?:хочу|готов).{0,30}(?:отклад|перенос)", player_text)
+            and any(word in player_text for word in ("завтра", "верн", "отлож", "позже", "перенес"))
+        )
     if proposal.agreement is None:
         return True
     terms = proposal.agreement
     rules = case.agreement_rules
+    prior_offer = any(
+        entry.speaker == "opponent"
+        and entry.status == "accepted"
+        and str(terms.kpi_percent) in entry.text
+        and "недел" in entry.text.casefold()
+        for entry in transcript
+    )
     return (
-        rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
+        not re.search(r"\bне\s+(?:готов|согласен|принимаю)\b|\bотказываюсь\b", player_text)
+        and (
+            "предлага" in player_text
+            or (str(terms.kpi_percent) in player_text and "недел" in player_text)
+            or ("согласен" in player_text and prior_offer)
+        )
+        and rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
         and rules.min_kpi_percent <= terms.kpi_percent <= rules.max_kpi_percent
         and (terms.automatic_raise or not rules.require_automatic_raise)
         and not re.search(r"\bне\s+(?:согласен|принимаю)\b", text)
@@ -194,8 +293,8 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
 
     @app.post("/v1/turn", response_model=TurnResponse, response_model_exclude_none=True)
     async def take_turn(request: TurnRequest) -> TurnResponse:
-        if request.snapshot.state.stage == "agreed":
-            raise HTTPException(status_code=409, detail="Duel already has an agreement")
+        if request.snapshot.state.stage != "negotiating":
+            raise HTTPException(status_code=409, detail="Duel already has a decision")
         if guard_blocks(request.user_text):
             safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
             snapshot = SessionSnapshot(
@@ -247,14 +346,23 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
             proposal = OpponentProposal.model_validate(raw_proposal)
         except ValueError:
             proposal = None
-        if proposal is None or not valid_proposal(proposal, request.case):
+        if proposal is None or not valid_proposal(
+            proposal, request.case, request.user_text, request.snapshot.transcript
+        ):
             return model_failure_response(request, "invalid_opponent_output")
         snapshot = SessionSnapshot(
             session_id=request.snapshot.session_id,
             state=SessionState(
                 turn_count=request.snapshot.state.turn_count + 1,
-                stage="agreed" if proposal.agreement is not None else "negotiating",
+                stage=(
+                    "agreed"
+                    if proposal.agreement is not None
+                    else proposal.decision.kind
+                    if proposal.decision is not None
+                    else "negotiating"
+                ),
                 agreement=proposal.agreement,
+                decision=proposal.decision,
             ),
             transcript=[
                 *request.snapshot.transcript,
@@ -278,6 +386,44 @@ def create_app(opponent: Opponent | None = None) -> FastAPI:
             status="accepted",
             opponent_text=proposal.text,
             snapshot=snapshot,
+        )
+
+    @app.post("/v1/finish", response_model=FinishResponse)
+    async def finish_duel(request: FinishRequest) -> FinishResponse:
+        agreement = request.snapshot.state.agreement
+        if agreement is not None:
+            outcome = OutcomeResult(
+                kind="agreement",
+                summary="Стороны согласовали условия повышения после контрольного периода.",
+                agreement=agreement,
+                commitments=[
+                    *agreement.employee_commitments,
+                    *agreement.director_commitments,
+                ],
+            )
+        elif isinstance(request.snapshot.state.decision, PartialDecision):
+            decision = request.snapshot.state.decision
+            outcome = OutcomeResult(
+                kind="partial_agreement",
+                summary="Стороны зафиксировали часть обязательств, но условия повышения остались открытыми.",
+                commitments=decision.commitments,
+                open_points=decision.open_points,
+            )
+        elif isinstance(request.snapshot.state.decision, DeferredDecision):
+            decision = request.snapshot.state.decision
+            outcome = OutcomeResult(
+                kind="deferred",
+                summary=f"Решение отложено: {decision.reason}",
+                next_step=decision.next_step,
+            )
+        else:
+            outcome = OutcomeResult(
+                kind="no_agreement",
+                summary="К моменту завершения разговора договорённость не зафиксирована.",
+            )
+        return FinishResponse(
+            session_id=request.snapshot.session_id,
+            outcome=outcome,
         )
 
     return app
