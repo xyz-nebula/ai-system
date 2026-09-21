@@ -26,11 +26,12 @@ CASE = {
 SNAPSHOT = {"session_id": "qwen-duel", "state": {"turn_count": 0}, "transcript": []}
 
 
+def text_completion(content: str) -> httpx.Response:
+    return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+
 def completion(content: object) -> httpx.Response:
-    return httpx.Response(
-        200,
-        json={"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]},
-    )
+    return text_completion(json.dumps(content, ensure_ascii=False))
 
 
 @pytest.fixture
@@ -175,6 +176,48 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
         body["chat_template_kwargs"] == {"enable_thinking": True}
         for role, body in calls[6:]
     )
+
+
+@pytest.mark.anyio
+async def test_turn_accepts_qwen_json_wrapped_in_one_markdown_fence() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        role = json.loads(request.content)["messages"][0]["content"].split("\n", 1)[0]
+        if role == "[ARENA_GUARD]":
+            return text_completion(
+                '```json\n{"decision": "allow", "reason": null}\n```'
+            )
+        if role == "[ARENA_OPPONENT]":
+            return completion({"text": "Предлагаю обсудить KPI и срок контроля."})
+        if role == "[ARENA_VALIDATOR]":
+            return completion({"decision": "accept"})
+        raise AssertionError(f"unexpected role: {role}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as model_http:
+        chat = QwenChatClient(
+            model_http,
+            chat_url="http://qwen.test/v1/chat/completions",
+            model="qwen-test",
+        )
+        app = create_app(
+            opponent=QwenOpponent(chat),
+            guard=QwenGuard(chat),
+            validator=QwenValidator(chat),
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v1/turn",
+                json={
+                    "case": CASE,
+                    "snapshot": SNAPSHOT,
+                    "turn_id": "turn-1",
+                    "user_text": "Как восстановить доверие?",
+                },
+            )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
 
 
 @pytest.mark.anyio
