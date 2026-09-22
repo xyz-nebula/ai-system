@@ -2,12 +2,15 @@
 
 import argparse
 import math
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 
 from arena_ai.contracts import (
     FinishResponse,
+    PreparationCard,
+    PreparationDuelComparison,
     ServiceInfo,
     SessionSnapshot,
     SessionState,
@@ -55,12 +58,41 @@ def positive_timeout(value: str) -> float:
     return seconds
 
 
+def load_preparation(path: Path | None) -> PreparationCard | None:
+    if path is None:
+        return None
+    preparation = PreparationCard.model_validate_json(path.read_text(encoding="utf-8"))
+    return preparation if preparation.has_content() else None
+
+
+def print_preparation_duel_comparison(comparison: PreparationDuelComparison) -> None:
+    status_labels = {
+        "followed": "По плану",
+        "adapted": "Адаптировано",
+        "not_observed": "Не проявилось",
+    }
+    print("Сопоставление подготовки с поединком:")
+    print(f"  {comparison.summary}")
+    for item in comparison.items:
+        print(f"  {status_labels[item.status]}: {item.preparation_text}")
+        print(f"    Наблюдение: {item.observation}")
+        if item.evidence_turn_id is not None:
+            print(f"    Эпизод ({item.evidence_turn_id}): «{item.evidence_quote}»")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Текстовый демо-клиент AI-контура")
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
     parser.add_argument("--turn-timeout", type=positive_timeout, default=210.0)
     parser.add_argument("--finish-timeout", type=positive_timeout, default=300.0)
+    parser.add_argument("--preparation-file", type=Path)
     args = parser.parse_args()
+
+    try:
+        preparation = load_preparation(args.preparation_file)
+    except (OSError, ValueError):
+        print("Не удалось загрузить карточку подготовки.")
+        return
 
     snapshot = SessionSnapshot(
         session_id=str(uuid4()), state=SessionState(turn_count=0), transcript=[]
@@ -92,9 +124,17 @@ def main() -> None:
                 break
             if user_text == ":finish":
                 try:
+                    finish_body: dict[str, object] = {
+                        "case": DEMO_CASE,
+                        "snapshot": snapshot.model_dump(mode="json"),
+                    }
+                    if preparation is not None:
+                        finish_body["preparation"] = preparation.model_dump(
+                            mode="json", exclude_none=True, exclude_defaults=True
+                        )
                     response = client.post(
                         "/v1/finish",
-                        json={"case": DEMO_CASE, "snapshot": snapshot.model_dump(mode="json")},
+                        json=finish_body,
                         timeout=args.finish_timeout,
                     )
                     response.raise_for_status()
@@ -167,6 +207,9 @@ def main() -> None:
                             print(f"    Последствие: {point.consequence}")
                     for recommendation in feedback.next_try:
                         print(f"  Следующая попытка: {recommendation}")
+                    comparison = feedback.plan_vs_reality
+                    if comparison is not None:
+                        print_preparation_duel_comparison(comparison)
                 break
             if user_text == ":history":
                 if not snapshot.transcript:

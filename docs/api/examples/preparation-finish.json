@@ -1,0 +1,87 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/finish",
+    "body": {
+      "case": {
+        "id": "next-day",
+        "title": "На следующий день...",
+        "shared_context": "Менеджер обсуждает условия повышения с директором.",
+        "player_role": "Менеджер",
+        "opponent_role": "Генеральный директор",
+        "player_private_context": "[REDACTED: player private context]",
+        "opponent_private_context": "[REDACTED: opponent private context]"
+      },
+      "snapshot": {
+        "session_id": "preparation-example",
+        "state": {
+          "turn_count": 1
+        },
+        "transcript": [
+          {
+            "turn_id": "turn-1",
+            "speaker": "player",
+            "status": "accepted",
+            "text": "Готов компенсировать пропуск и обсудить KPI."
+          },
+          {
+            "turn_id": "turn-1",
+            "speaker": "opponent",
+            "status": "accepted",
+            "text": "Какие измеримые условия вы предлагаете?"
+          }
+        ]
+      },
+      "preparation": {
+        "negotiation_goal": "Согласовать измеримые условия повышения.",
+        "planned_questions": [
+          "Какие KPI подтвердят готовность к новой роли?"
+        ]
+      }
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "body": {
+      "session_id": "preparation-example",
+      "outcome": {
+        "kind": "no_agreement",
+        "summary": "Условия повышения обсуждены, но соглашение ещё не достигнуто."
+      },
+      "judge_verdicts": [],
+      "trainer_feedback": {
+        "status": "ready",
+        "feedback": {
+          "summary": "Менеджер связал ответственность с измеримыми условиями.",
+          "strengths": [
+            {
+              "evidence_turn_id": "turn-1",
+              "evidence_quote": "обсудить KPI",
+              "action": "Поднял тему измеримых критериев.",
+              "situation_change": "Обсуждение перешло к условиям повышения.",
+              "consequence": "Появилась основа для конкретизации договорённости."
+            }
+          ],
+          "mistakes": [],
+          "next_try": [
+            "Задай подготовленный вопрос о конкретных KPI."
+          ],
+          "plan_vs_reality": {
+            "summary": "Запланированный вопрос был адаптирован в предложение обсудить KPI.",
+            "items": [
+              {
+                "preparation_kind": "planned_question",
+                "preparation_text": "Какие KPI подтвердят готовность к новой роли?",
+                "status": "adapted",
+                "evidence_turn_id": "turn-1",
+                "evidence_quote": "обсудить KPI",
+                "observation": "Тема появилась, но вопрос не был задан напрямую."
+              }
+            ]
+          }
+        },
+        "error_code": null
+      }
+    }
+  }
+}

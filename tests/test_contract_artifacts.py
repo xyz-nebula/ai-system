@@ -2,7 +2,13 @@ import json
 from pathlib import Path
 
 from arena_ai.app import create_app
-from arena_ai.contracts import TurnRequest, TurnResponse
+from arena_ai.contracts import (
+    FinishRequest,
+    FinishResponse,
+    PreparationCard,
+    TurnRequest,
+    TurnResponse,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,3 +39,26 @@ def test_managed_turn_examples_match_public_contracts_and_use_placeholders() -> 
     assert examples["request_body_rule"].startswith("Send the top-level case")
     assert case["player_private_context"].startswith("[REDACTED:")
     assert case["opponent_private_context"].startswith("[REDACTED:")
+
+
+def test_preparation_finish_example_matches_public_contracts() -> None:
+    example = json.loads(
+        (ROOT / "docs" / "api" / "examples" / "preparation-finish.json").read_text()
+    )
+
+    request = FinishRequest.model_validate(example["request"]["body"])
+    response = FinishResponse.model_validate(example["response"]["body"])
+    cli_card = PreparationCard.model_validate_json(
+        (ROOT / "docs" / "api" / "examples" / "preparation-card.json").read_text()
+    )
+
+    assert request.preparation is not None
+    assert request.preparation.negotiation_goal == "Согласовать измеримые условия повышения."
+    assert cli_card == request.preparation
+    assert response.session_id == request.snapshot.session_id
+    assert response.trainer_feedback.feedback is not None
+    comparison = response.trainer_feedback.feedback.plan_vs_reality
+    assert comparison is not None
+    assert comparison.items[0].status == "adapted"
+    assert request.case.player_private_context.startswith("[REDACTED:")
+    assert request.case.opponent_private_context.startswith("[REDACTED:")
