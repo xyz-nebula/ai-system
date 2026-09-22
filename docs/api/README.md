@@ -3,6 +3,8 @@
 - `openapi.json` — зафиксированная схема работающего AI-сервиса.
 - `examples/managed-turn.json` — безопасные примеры `accepted`, `blocked`, `model_error`, 409 и 401. Значения закрытых вводных и service token заменены placeholders.
 
+В файле примеров `case` вынесен наверх, чтобы не повторять его пять раз. Полное тело каждого запроса собирается по правилу `{"case": <top-level case>, ...scenario.request.body}`; это же правило проверяют artifact- и black-box тесты.
+
 Проверить, что схема не разошлась с приложением:
 
 ```bash

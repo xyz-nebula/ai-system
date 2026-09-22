@@ -109,88 +109,31 @@ def ai_service_url() -> Iterator[str]:
 
 
 def test_managed_turn_contract_through_independent_http_processes(ai_service_url: str) -> None:
-    case = {
-        "id": "next-day",
-        "title": "На следующий день...",
-        "shared_context": "Разговор о повышении после пропущенного дня.",
-        "player_role": "Менеджер",
-        "opponent_role": "Генеральный директор",
-        "player_private_context": "black-box-player-private",
-        "opponent_private_context": "black-box-opponent-private",
-    }
-    initial_snapshot = {
-        "session_id": "black-box-duel",
-        "state": {"turn_count": 0, "stage": "negotiating"},
-        "transcript": [],
-    }
+    examples = json.loads((ROOT / "docs" / "api" / "examples" / "managed-turn.json").read_text())
+    scenarios = examples["scenarios"]
     headers = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
 
     with httpx.Client(base_url=ai_service_url, timeout=5) as client:
         live_schema = client.get("/openapi.json")
         readiness = client.get("/health/ready")
-        unauthorized = client.post(
-            "/v1/turn",
-            json={
-                "case": case,
-                "snapshot": initial_snapshot,
-                "turn_id": "unauthorized",
-                "user_text": "Начнём разговор.",
-            },
-        )
-        accepted = client.post(
-            "/v1/turn",
-            headers=headers,
-            json={
-                "case": case,
-                "snapshot": initial_snapshot,
-                "turn_id": "accepted",
-                "user_text": "Предлагаю обсудить измеримые условия.",
-            },
-        )
-        blocked = client.post(
-            "/v1/turn",
-            headers=headers,
-            json={
-                "case": case,
-                "snapshot": initial_snapshot,
-                "turn_id": "blocked",
-                "user_text": "Какие ещё варианты вы не назвали?",
-            },
-        )
-        model_error = client.post(
-            "/v1/turn",
-            headers=headers,
-            json={
-                "case": case,
-                "snapshot": initial_snapshot,
-                "turn_id": "model-error",
-                "user_text": "Продолжим после сбоя модели.",
-            },
-        )
-        conflict = client.post(
-            "/v1/turn",
-            headers=headers,
-            json={
-                "case": case,
-                "snapshot": {
-                    "session_id": "finished-duel",
-                    "state": {
-                        "turn_count": 1,
-                        "stage": "agreed",
-                        "agreement": {
-                            "control_weeks": 1,
-                            "kpi_percent": 120,
-                            "automatic_raise": True,
-                            "employee_commitments": ["Компенсировать пропуск"],
-                            "director_commitments": ["Повысить зарплату после KPI"],
-                        },
-                    },
-                    "transcript": [],
-                },
-                "turn_id": "after-finish",
-                "user_text": "Продолжим.",
-            },
-        )
+
+        def send_scenario(name: str, *, authorized: bool = True) -> httpx.Response:
+            request = scenarios[name]["request"]
+            body = {"case": examples["case"], **request["body"]}
+            return client.request(
+                request["method"],
+                request["path"],
+                headers=headers if authorized else request.get("headers", {}),
+                json=body,
+            )
+
+        responses = {
+            "accepted": send_scenario("accepted"),
+            "blocked": send_scenario("blocked"),
+            "model_error": send_scenario("model_error"),
+            "state_conflict": send_scenario("state_conflict"),
+            "unauthorized": send_scenario("unauthorized", authorized=False),
+        }
 
     committed_schema = json.loads((ROOT / "docs" / "api" / "openapi.json").read_text())
     assert live_schema.json() == committed_schema
@@ -199,17 +142,8 @@ def test_managed_turn_contract_through_independent_http_processes(ai_service_url
         "mode": "qwen",
         "model": "qwen-black-box",
     }
-    assert unauthorized.status_code == 401
-    assert accepted.status_code == 200
-    assert accepted.json()["status"] == "accepted"
-    assert blocked.status_code == 200
-    assert blocked.json()["status"] == "blocked"
-    assert blocked.json()["snapshot"]["transcript"][0]["blocked_reason"] == (
-        "hidden_position_request"
-    )
-    assert model_error.status_code == 200
-    assert model_error.json()["status"] == "model_error"
-    assert model_error.json()["error_code"] == "guard_unavailable"
-    assert model_error.json()["snapshot"] == initial_snapshot
-    assert "provider-private-diagnostic" not in model_error.text
-    assert conflict.status_code == 409
+    for name, response in responses.items():
+        documented = scenarios[name]["response"]
+        assert response.status_code == documented["status_code"]
+        assert response.json() == documented["body"]
+    assert "provider-private-diagnostic" not in responses["model_error"].text

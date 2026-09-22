@@ -43,7 +43,7 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
             return
 
         if system.startswith("[ARENA_GUARD]"):
-            if "сбоя модели" in user_text.casefold():
+            if "продолжить разговор" in user_text.casefold():
                 self.send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {"error": {"message": "provider-private-diagnostic"}},
