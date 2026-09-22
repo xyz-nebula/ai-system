@@ -1,5 +1,6 @@
 """Contracts for text turns and factual duel outcomes."""
 
+from dataclasses import dataclass
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -16,6 +17,15 @@ type ModelErrorCode = Literal[
 ]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
 type GuardReason = Literal["prompt_override", "private_data_request", "hidden_position_request"]
+type PreparationItemKind = Literal[
+    "situation_analysis",
+    "strategic_goal",
+    "negotiation_goal",
+    "planned_question",
+    "possible_solution",
+    "argument",
+]
+type PreparationComparisonStatus = Literal["followed", "adapted", "not_observed"]
 type ReadinessFailureCategory = Literal[
     "gateway_unavailable",
     "invalid_gateway_response",
@@ -26,6 +36,12 @@ type NonEmptyText = Annotated[str, Field(min_length=1)]
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparationItem:
+    kind: PreparationItemKind
+    text: str
 
 
 class AgreementRules(Contract):
@@ -164,6 +180,26 @@ class PreparationCard(Contract):
             )
         )
 
+    def comparison_items(self) -> list[PreparationItem]:
+        items: list[PreparationItem] = []
+        for kind, text in (
+            ("situation_analysis", self.situation_analysis),
+            ("strategic_goal", self.strategic_goal),
+            ("negotiation_goal", self.negotiation_goal),
+        ):
+            if text is not None:
+                items.append(PreparationItem(kind=kind, text=text))
+        items.extend(
+            PreparationItem(kind="planned_question", text=text)
+            for text in self.planned_questions
+        )
+        items.extend(
+            PreparationItem(kind="possible_solution", text=text)
+            for text in self.possible_solutions
+        )
+        items.extend(PreparationItem(kind="argument", text=text) for text in self.arguments)
+        return items
+
 
 class FinishRequest(Contract):
     case: CaseConfig
@@ -282,11 +318,41 @@ class CoachingPoint(Contract):
     consequence: str = Field(min_length=1)
 
 
+class PreparationComparisonItem(Contract):
+    preparation_kind: PreparationItemKind
+    preparation_text: str = Field(min_length=1)
+    status: PreparationComparisonStatus
+    evidence_turn_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    evidence_quote: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
+    observation: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def evidence_matches_status(self) -> Self:
+        has_evidence = self.evidence_turn_id is not None and self.evidence_quote is not None
+        if (self.status in ("followed", "adapted")) != has_evidence:
+            raise ValueError("observed plan items require evidence")
+        if self.status == "not_observed" and (
+            self.evidence_turn_id is not None or self.evidence_quote is not None
+        ):
+            raise ValueError("unobserved plan items cannot have evidence")
+        return self
+
+
+class PreparationDuelComparison(Contract):
+    summary: str = Field(min_length=1)
+    items: list[PreparationComparisonItem] = Field(min_length=1)
+
+
 class TrainerFeedback(Contract):
     summary: str = Field(min_length=1)
     strengths: list[CoachingPoint] = Field(default_factory=list)
     mistakes: list[CoachingPoint] = Field(default_factory=list)
     next_try: list[str] = Field(min_length=1)
+    plan_vs_reality: PreparationDuelComparison | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def has_observed_episode(self) -> Self:

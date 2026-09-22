@@ -109,6 +109,52 @@ class UnexpectedOpponent:
         raise AssertionError("preparation must not trigger the opponent")
 
 
+class PreparationComparisonTrainer(RecordingTrainer):
+    async def feedback(self, context: TrainerContext) -> object:
+        raw = await super().feedback(context)
+        assert isinstance(raw, dict)
+        assert context.preparation is not None
+        raw["plan_vs_reality"] = {
+            "summary": "Запланированный вопрос о критериях превратился в предложение обсудить KPI.",
+            "items": [
+                {
+                    "preparation_kind": "planned_question",
+                    "preparation_text": "Какие KPI подтвердят готовность к новой роли?",
+                    "status": "adapted",
+                    "evidence_turn_id": "turn-1",
+                    "evidence_quote": "обсудить KPI",
+                    "observation": "Менеджер не задал вопрос дословно, но поднял запланированную тему.",
+                }
+            ],
+        }
+        return raw
+
+
+class InvalidPreparationComparisonTrainer(PreparationComparisonTrainer):
+    def __init__(self, fault: str) -> None:
+        super().__init__()
+        self.fault = fault
+
+    async def feedback(self, context: TrainerContext) -> object:
+        raw = await super().feedback(context)
+        assert isinstance(raw, dict)
+        comparison = raw["plan_vs_reality"]
+        assert isinstance(comparison, dict)
+        items = comparison["items"]
+        assert isinstance(items, list)
+        item = items[0]
+        assert isinstance(item, dict)
+        if self.fault == "invented_item":
+            item["preparation_text"] = "Незапланированная уступка"
+        elif self.fault == "absent_evidence":
+            item["evidence_quote"] = "Несуществующая реплика"
+        elif self.fault == "evidence_for_unobserved":
+            item["status"] = "not_observed"
+        else:
+            raise AssertionError(f"unexpected fault: {self.fault}")
+        return raw
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -159,7 +205,7 @@ async def test_finish_sends_partial_preparation_to_the_trainer() -> None:
     assert preparation is not None
     assert preparation.negotiation_goal == "Согласовать измеримые условия повышения."
     assert preparation.planned_questions == ["Какие KPI подтвердят готовность к новой роли?"]
-    assert "preparation" not in response.json()["trainer_feedback"]["feedback"]
+    assert response.json()["trainer_feedback"]["error_code"] == "invalid_trainer_output"
 
 
 @pytest.mark.anyio
@@ -224,6 +270,100 @@ async def test_preparation_is_only_accepted_when_finishing_for_the_trainer() -> 
     assert finish.status_code == 200
     assert trainer.contexts[0].preparation is not None
     assert trainer.contexts[0].preparation.strategic_goal == "private-preparation-marker"
+
+
+@pytest.mark.anyio
+async def test_trainer_compares_a_preparation_item_with_an_observed_player_turn() -> None:
+    app = create_app(trainer=PreparationComparisonTrainer())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "preparation": {
+                    "planned_questions": ["Какие KPI подтвердят готовность к новой роли?"]
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    trainer_slot = response.json()["trainer_feedback"]
+    assert trainer_slot["status"] == "ready"
+    comparison = trainer_slot["feedback"]["plan_vs_reality"]
+    assert comparison["items"] == [
+        {
+            "preparation_kind": "planned_question",
+            "preparation_text": "Какие KPI подтвердят готовность к новой роли?",
+            "status": "adapted",
+            "evidence_turn_id": "turn-1",
+            "evidence_quote": "обсудить KPI",
+            "observation": "Менеджер не задал вопрос дословно, но поднял запланированную тему.",
+        }
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "fault",
+    ["invented_item", "absent_evidence", "evidence_for_unobserved"],
+)
+async def test_invalid_preparation_comparison_is_rejected_without_affecting_other_results(
+    fault: str,
+) -> None:
+    app = create_app(trainer=InvalidPreparationComparisonTrainer(fault))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "preparation": {
+                    "planned_questions": ["Какие KPI подтвердят готовность к новой роли?"]
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["outcome"]["kind"] == "no_agreement"
+    assert all(slot["status"] == "ready" for slot in result["judge_verdicts"])
+    assert result["trainer_feedback"] == {
+        "status": "failed",
+        "feedback": None,
+        "error_code": "invalid_trainer_output",
+    }
+
+
+@pytest.mark.anyio
+async def test_demo_trainer_does_not_claim_that_it_observed_the_preparation() -> None:
+    app = create_app()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "preparation": {"strategic_goal": "Сохранить рабочие отношения."},
+            },
+        )
+
+    assert response.status_code == 200
+    trainer_slot = response.json()["trainer_feedback"]
+    assert trainer_slot["status"] == "ready"
+    item = trainer_slot["feedback"]["plan_vs_reality"]["items"][0]
+    assert item == {
+        "preparation_kind": "strategic_goal",
+        "preparation_text": "Сохранить рабочие отношения.",
+        "status": "not_observed",
+        "observation": "Для содержательного сопоставления нужен вызов реальной модели.",
+    }
 
 
 @pytest.mark.anyio

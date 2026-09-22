@@ -66,6 +66,7 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "manager-only-marker" not in request.content.decode()
             assert "director-only-marker" not in request.content.decode()
             assert "attack-marker" not in request.content.decode()
+            assert "Спросить, как восстановить доверие." not in request.content.decode()
             return completion(
                 {
                     "college": context["college"],
@@ -81,6 +82,8 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "manager-only-marker" not in request.content.decode()
             assert "director-only-marker" not in request.content.decode()
             assert "attack-marker" not in request.content.decode()
+            assert "Сопоставь каждый вывод" in system
+            assert "Спросить, как восстановить доверие." in request.content.decode()
             return completion(
                 {
                     "summary": "Менеджер начал с вопроса о доверии.",
@@ -95,6 +98,19 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
                     ],
                     "mistakes": [],
                     "next_try": ["Предложи срок контроля и KPI."],
+                    "plan_vs_reality": {
+                        "summary": "Запланированный вопрос был задан в первом ходе.",
+                        "items": [
+                            {
+                                "preparation_kind": "planned_question",
+                                "preparation_text": "Спросить, как восстановить доверие.",
+                                "status": "followed",
+                                "evidence_turn_id": "turn-1",
+                                "evidence_quote": "Как восстановить доверие?",
+                                "observation": "Менеджер начал с запланированного вопроса.",
+                            }
+                        ],
+                    },
                 }
             )
         raise AssertionError(f"unexpected role: {role}")
@@ -153,7 +169,14 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert blocked.status_code == 200
             assert blocked.json()["status"] == "blocked"
             finish = await client.post(
-                "/v1/finish", json={"case": CASE, "snapshot": blocked.json()["snapshot"]}
+                "/v1/finish",
+                json={
+                    "case": CASE,
+                    "snapshot": blocked.json()["snapshot"],
+                    "preparation": {
+                        "planned_questions": ["Спросить, как восстановить доверие."]
+                    },
+                },
             )
 
     assert finish.status_code == 200
@@ -161,6 +184,9 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
     assert result["outcome"]["kind"] == "no_agreement"
     assert all(slot["status"] == "ready" for slot in result["judge_verdicts"])
     assert result["trainer_feedback"]["status"] == "ready"
+    assert result["trainer_feedback"]["feedback"]["plan_vs_reality"]["items"][0][
+        "status"
+    ] == "followed"
     assert Counter(role for role, _ in calls) == {
         "[ARENA_GUARD]": 2,
         "[ARENA_OPPONENT]": 2,

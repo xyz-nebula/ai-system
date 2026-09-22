@@ -592,6 +592,101 @@
         "title": "PreparationCard",
         "type": "object"
       },
+      "PreparationComparisonItem": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_quote": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Quote"
+          },
+          "evidence_turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Turn Id"
+          },
+          "observation": {
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          },
+          "preparation_kind": {
+            "$ref": "#/components/schemas/PreparationItemKind"
+          },
+          "preparation_text": {
+            "minLength": 1,
+            "title": "Preparation Text",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PreparationComparisonStatus"
+          }
+        },
+        "required": [
+          "preparation_kind",
+          "preparation_text",
+          "status",
+          "observation"
+        ],
+        "title": "PreparationComparisonItem",
+        "type": "object"
+      },
+      "PreparationComparisonStatus": {
+        "enum": [
+          "followed",
+          "adapted",
+          "not_observed"
+        ],
+        "type": "string"
+      },
+      "PreparationDuelComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PreparationComparisonItem"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "items"
+        ],
+        "title": "PreparationDuelComparison",
+        "type": "object"
+      },
+      "PreparationItemKind": {
+        "enum": [
+          "situation_analysis",
+          "strategic_goal",
+          "negotiation_goal",
+          "planned_question",
+          "possible_solution",
+          "argument"
+        ],
+        "type": "string"
+      },
       "ReadinessFailureCategory": {
         "enum": [
           "gateway_unavailable",
@@ -766,6 +861,16 @@
             "minItems": 1,
             "title": "Next Try",
             "type": "array"
+          },
+          "plan_vs_reality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationDuelComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "strengths": {
             "items": {

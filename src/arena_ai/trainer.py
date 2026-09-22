@@ -6,6 +6,7 @@ from arena_ai.contracts import (
     CaseConfig,
     OutcomeResult,
     PreparationCard,
+    PreparationItem,
     SessionSnapshot,
     TrainerContext,
     TrainerFeedback,
@@ -30,7 +31,7 @@ class DemoTrainer:
         )
         if evidence is None:
             raise ValueError("No accepted player turn")
-        return {
+        result: dict[str, object] = {
             "summary": "Демонстрационный разбор без оценки качества переговоров моделью.",
             "strengths": [
                 {
@@ -46,18 +47,81 @@ class DemoTrainer:
                 "В следующей попытке явно предложите срок контроля, измеримый KPI и условие повышения."
             ],
         }
+        if context.preparation is not None:
+            prepared_item = context.preparation.comparison_items()[0]
+            result["plan_vs_reality"] = {
+                "summary": "Демонстрационный режим не оценивает выполнение подготовки.",
+                "items": [
+                    {
+                        "preparation_kind": prepared_item.kind,
+                        "preparation_text": prepared_item.text,
+                        "status": "not_observed",
+                        "evidence_turn_id": None,
+                        "evidence_quote": None,
+                        "observation": "Для содержательного сопоставления нужен вызов реальной модели.",
+                    }
+                ],
+            }
+        return result
+
+
+def player_evidence_is_grounded(
+    context: TrainerContext,
+    turn_id: str,
+    quote: str,
+    *,
+    accepted_only: bool,
+) -> bool:
+    return any(
+        entry.speaker == "player"
+        and (not accepted_only or entry.status == "accepted")
+        and entry.turn_id == turn_id
+        and quote in entry.text
+        for entry in context.transcript
+    )
+
+
+def preparation_comparison_is_grounded(
+    feedback: TrainerFeedback, context: TrainerContext
+) -> bool:
+    comparison = feedback.plan_vs_reality
+    if context.preparation is None:
+        return comparison is None
+    if comparison is None:
+        return False
+    prepared_items = set(context.preparation.comparison_items())
+    for item in comparison.items:
+        if (
+            PreparationItem(kind=item.preparation_kind, text=item.preparation_text)
+            not in prepared_items
+        ):
+            return False
+        if item.status == "not_observed":
+            continue
+        if item.evidence_turn_id is None or item.evidence_quote is None:
+            return False
+        if not player_evidence_is_grounded(
+            context,
+            item.evidence_turn_id,
+            item.evidence_quote,
+            accepted_only=True,
+        ):
+            return False
+    return True
 
 
 def feedback_is_grounded(
     feedback: TrainerFeedback, context: TrainerContext, case: CaseConfig
 ) -> bool:
+    if not preparation_comparison_is_grounded(feedback, context):
+        return False
     points = [*feedback.strengths, *feedback.mistakes]
     if any(
-        not any(
-            entry.speaker == "player"
-            and entry.turn_id == point.evidence_turn_id
-            and point.evidence_quote in entry.text
-            for entry in context.transcript
+        not player_evidence_is_grounded(
+            context,
+            point.evidence_turn_id,
+            point.evidence_quote,
+            accepted_only=False,
         )
         for point in points
     ):
@@ -66,6 +130,18 @@ def feedback_is_grounded(
         [
             feedback.summary,
             *feedback.next_try,
+            *(
+                []
+                if feedback.plan_vs_reality is None
+                else [
+                    feedback.plan_vs_reality.summary,
+                    *(
+                        text
+                        for item in feedback.plan_vs_reality.items
+                        for text in (item.evidence_quote or "", item.observation)
+                    ),
+                ]
+            ),
             *(
                 field
                 for point in points
