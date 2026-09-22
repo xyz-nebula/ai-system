@@ -1,3 +1,5 @@
+from collections.abc import Callable, Coroutine
+
 import httpx
 import pytest
 
@@ -11,6 +13,18 @@ def configure_qwen(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ARENA_QWEN_MODELS_URL", raising=False)
     monkeypatch.delenv("ARENA_QWEN_API_KEY", raising=False)
     monkeypatch.delenv("ARENA_QWEN_READINESS_TIMEOUT_SECONDS", raising=False)
+
+
+async def request_configured_health(
+    gateway: Callable[[httpx.Request], Coroutine[None, None, httpx.Response]],
+    path: str = "/health/ready",
+) -> httpx.Response:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
+        app = create_configured_app(model_http)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.get(path)
 
 
 @pytest.fixture
@@ -54,13 +68,7 @@ async def test_qwen_readiness_finds_configured_model(
         assert request.url == "https://qwen.test/v1/models"
         return httpx.Response(200, json={"data": [{"id": "qwen-test"}]})
 
-    model_http = httpx.AsyncClient(transport=httpx.MockTransport(gateway))
-    app = create_configured_app(model_http)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        response = await client.get("/health/ready")
-    await model_http.aclose()
+    response = await request_configured_health(gateway)
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "mode": "qwen", "model": "qwen-test"}
@@ -75,12 +83,7 @@ async def test_qwen_readiness_reports_missing_model_without_provider_body(
     async def gateway(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": [{"id": "provider-private-model"}]})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
-        app = create_configured_app(model_http)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.get("/health/ready")
+    response = await request_configured_health(gateway)
 
     assert response.status_code == 503
     assert response.json() == {
@@ -101,12 +104,7 @@ async def test_qwen_readiness_reports_network_failure_without_diagnostics(
     async def gateway(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("provider-private-diagnostic", request=request)
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
-        app = create_configured_app(model_http)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.get("/health/ready")
+    response = await request_configured_health(gateway)
 
     assert response.status_code == 503
     assert response.json()["category"] == "gateway_unavailable"
@@ -122,12 +120,7 @@ async def test_qwen_readiness_reports_invalid_gateway_response_safely(
     async def gateway(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="provider-private-invalid-body")
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
-        app = create_configured_app(model_http)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.get("/health/ready")
+    response = await request_configured_health(gateway)
 
     assert response.status_code == 503
     assert response.json()["category"] == "invalid_gateway_response"
@@ -144,12 +137,7 @@ async def test_qwen_liveness_does_not_call_gateway(monkeypatch: pytest.MonkeyPat
         calls += 1
         raise AssertionError("liveness must not call the model gateway")
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
-        app = create_configured_app(model_http)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.get("/health/live")
+    response = await request_configured_health(gateway, "/health/live")
 
     assert response.status_code == 200
     assert calls == 0
@@ -175,11 +163,6 @@ async def test_qwen_readiness_uses_explicit_endpoint_credentials_and_short_timeo
         }
         return httpx.Response(200, json={"data": [{"id": "qwen-test"}]})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
-        app = create_configured_app(model_http)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.get("/health/ready")
+    response = await request_configured_health(gateway)
 
     assert response.status_code == 200

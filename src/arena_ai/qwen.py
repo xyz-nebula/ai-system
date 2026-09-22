@@ -56,6 +56,16 @@ def extra_body_from_env(name: str) -> dict[str, object]:
     return parsed
 
 
+def positive_float_from_env(name: str, default: str) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive number") from error
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive number")
+    return value
+
+
 @dataclass(frozen=True)
 class QwenSettings:
     chat_url: str
@@ -77,20 +87,6 @@ class QwenSettings:
         json_mode = os.environ.get("ARENA_QWEN_JSON_MODE", "prompt")
         if json_mode not in ("prompt", "json_object"):
             raise ValueError("ARENA_QWEN_JSON_MODE must be prompt or json_object")
-        try:
-            timeout = float(os.environ.get("ARENA_QWEN_TIMEOUT_SECONDS", "60"))
-        except ValueError as error:
-            raise ValueError("ARENA_QWEN_TIMEOUT_SECONDS must be a positive number") from error
-        if timeout <= 0:
-            raise ValueError("ARENA_QWEN_TIMEOUT_SECONDS must be a positive number")
-        try:
-            readiness_timeout = float(os.environ.get("ARENA_QWEN_READINESS_TIMEOUT_SECONDS", "3"))
-        except ValueError as error:
-            raise ValueError(
-                "ARENA_QWEN_READINESS_TIMEOUT_SECONDS must be a positive number"
-            ) from error
-        if readiness_timeout <= 0:
-            raise ValueError("ARENA_QWEN_READINESS_TIMEOUT_SECONDS must be a positive number")
         return cls(
             chat_url=chat_url,
             models_url=os.environ.get("ARENA_QWEN_MODELS_URL")
@@ -98,8 +94,10 @@ class QwenSettings:
             model=model,
             api_key=os.environ.get("ARENA_QWEN_API_KEY") or None,
             json_mode=json_mode,
-            timeout_seconds=timeout,
-            readiness_timeout_seconds=readiness_timeout,
+            timeout_seconds=positive_float_from_env("ARENA_QWEN_TIMEOUT_SECONDS", "60"),
+            readiness_timeout_seconds=positive_float_from_env(
+                "ARENA_QWEN_READINESS_TIMEOUT_SECONDS", "3"
+            ),
             fast_extra_body=extra_body_from_env("ARENA_QWEN_FAST_EXTRA_BODY"),
             reasoned_extra_body=extra_body_from_env("ARENA_QWEN_REASONED_EXTRA_BODY"),
         )
