@@ -8,8 +8,9 @@ from secrets import compare_digest
 from typing import Annotated, Literal, Protocol
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from arena_ai.contracts import (
     CaseConfig,
@@ -39,6 +40,8 @@ from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.outcome import determine_outcome
 from arena_ai.privacy import contains_private_phrase, public_transcript
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
+
+SERVICE_BEARER = HTTPBearer(auto_error=False)
 
 
 class Opponent(Protocol):
@@ -236,12 +239,14 @@ def create_app(
     active_trainer = trainer if trainer is not None else DemoTrainer()
 
     async def require_service_token(
-        authorization: Annotated[str | None, Header()] = None,
+        credentials: Annotated[
+            HTTPAuthorizationCredentials | None,
+            Security(SERVICE_BEARER),
+        ],
     ) -> None:
         if service_token is None:
             return
-        expected = f"Bearer {service_token}"
-        if authorization is None or not compare_digest(authorization, expected):
+        if credentials is None or not compare_digest(credentials.credentials, service_token):
             raise HTTPException(
                 status_code=401,
                 detail="Unauthorized",

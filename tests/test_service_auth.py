@@ -132,3 +132,13 @@ async def test_service_metadata_stays_public_and_does_not_expose_token() -> None
     assert openapi.status_code == 200
     assert service_token not in info.text
     assert service_token not in openapi.text
+
+
+def test_openapi_documents_bearer_auth_for_duel_operations() -> None:
+    schema = create_app(service_token="must-not-appear").openapi()
+
+    assert schema["components"]["securitySchemes"] == {
+        "HTTPBearer": {"type": "http", "scheme": "bearer"}
+    }
+    assert schema["paths"]["/v1/turn"]["post"]["security"] == [{"HTTPBearer": []}]
+    assert schema["paths"]["/v1/finish"]["post"]["security"] == [{"HTTPBearer": []}]

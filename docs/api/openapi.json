@@ -1,0 +1,1084 @@
+{
+  "components": {
+    "schemas": {
+      "AgreementRules": {
+        "additionalProperties": false,
+        "properties": {
+          "max_control_weeks": {
+            "default": 4,
+            "minimum": 0.0,
+            "title": "Max Control Weeks",
+            "type": "integer"
+          },
+          "max_kpi_percent": {
+            "default": 130,
+            "minimum": 0.0,
+            "title": "Max Kpi Percent",
+            "type": "integer"
+          },
+          "min_control_weeks": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Min Control Weeks",
+            "type": "integer"
+          },
+          "min_kpi_percent": {
+            "default": 100,
+            "minimum": 0.0,
+            "title": "Min Kpi Percent",
+            "type": "integer"
+          },
+          "require_automatic_raise": {
+            "default": true,
+            "title": "Require Automatic Raise",
+            "type": "boolean"
+          }
+        },
+        "title": "AgreementRules",
+        "type": "object"
+      },
+      "CaseConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_rules": {
+            "$ref": "#/components/schemas/AgreementRules"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "opponent_private_context": {
+            "title": "Opponent Private Context",
+            "type": "string"
+          },
+          "opponent_private_phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Opponent Private Phrases",
+            "type": "array"
+          },
+          "opponent_role": {
+            "title": "Opponent Role",
+            "type": "string"
+          },
+          "player_private_context": {
+            "title": "Player Private Context",
+            "type": "string"
+          },
+          "player_role": {
+            "title": "Player Role",
+            "type": "string"
+          },
+          "shared_context": {
+            "title": "Shared Context",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "shared_context",
+          "player_role",
+          "opponent_role",
+          "player_private_context",
+          "opponent_private_context"
+        ],
+        "title": "CaseConfig",
+        "type": "object"
+      },
+      "CoachingPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "consequence": {
+            "minLength": 1,
+            "title": "Consequence",
+            "type": "string"
+          },
+          "evidence_quote": {
+            "minLength": 1,
+            "title": "Evidence Quote",
+            "type": "string"
+          },
+          "evidence_turn_id": {
+            "title": "Evidence Turn Id",
+            "type": "string"
+          },
+          "situation_change": {
+            "minLength": 1,
+            "title": "Situation Change",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_turn_id",
+          "evidence_quote",
+          "action",
+          "situation_change",
+          "consequence"
+        ],
+        "title": "CoachingPoint",
+        "type": "object"
+      },
+      "DealTerms": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic_raise": {
+            "title": "Automatic Raise",
+            "type": "boolean"
+          },
+          "control_weeks": {
+            "minimum": 0.0,
+            "title": "Control Weeks",
+            "type": "integer"
+          },
+          "director_commitments": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Director Commitments",
+            "type": "array"
+          },
+          "employee_commitments": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Employee Commitments",
+            "type": "array"
+          },
+          "kpi_percent": {
+            "minimum": 0.0,
+            "title": "Kpi Percent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "control_weeks",
+          "kpi_percent",
+          "automatic_raise",
+          "employee_commitments",
+          "director_commitments"
+        ],
+        "title": "DealTerms",
+        "type": "object"
+      },
+      "DeferredDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "deferred",
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_step": {
+            "minLength": 1,
+            "title": "Next Step",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "next_step"
+        ],
+        "title": "DeferredDecision",
+        "type": "object"
+      },
+      "FinishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/CaseConfig"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SessionSnapshot"
+          }
+        },
+        "required": [
+          "case",
+          "snapshot"
+        ],
+        "title": "FinishRequest",
+        "type": "object"
+      },
+      "FinishResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "judge_verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/JudgeSlot"
+            },
+            "title": "Judge Verdicts",
+            "type": "array"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/OutcomeResult"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "trainer_feedback": {
+            "$ref": "#/components/schemas/TrainerSlot"
+          }
+        },
+        "required": [
+          "session_id",
+          "outcome",
+          "judge_verdicts",
+          "trainer_feedback"
+        ],
+        "title": "FinishResponse",
+        "type": "object"
+      },
+      "GuardReason": {
+        "enum": [
+          "prompt_override",
+          "private_data_request",
+          "hidden_position_request"
+        ],
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InterimDecision": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PartialDecision"
+          },
+          {
+            "$ref": "#/components/schemas/DeferredDecision"
+          }
+        ]
+      },
+      "JudgeCollege": {
+        "enum": [
+          "hiring",
+          "negotiation",
+          "ownership"
+        ],
+        "type": "string"
+      },
+      "JudgeSlot": {
+        "additionalProperties": false,
+        "properties": {
+          "college": {
+            "$ref": "#/components/schemas/JudgeCollege"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "judge_unavailable",
+                  "invalid_judge_output"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JudgeVerdict"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "college",
+          "status"
+        ],
+        "title": "JudgeSlot",
+        "type": "object"
+      },
+      "JudgeVerdict": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "player",
+              "opponent"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "college": {
+            "$ref": "#/components/schemas/JudgeCollege"
+          },
+          "comparison": {
+            "minLength": 1,
+            "title": "Comparison",
+            "type": "string"
+          },
+          "effect": {
+            "minLength": 1,
+            "title": "Effect",
+            "type": "string"
+          },
+          "evidence_quote": {
+            "minLength": 1,
+            "title": "Evidence Quote",
+            "type": "string"
+          },
+          "evidence_turn_id": {
+            "title": "Evidence Turn Id",
+            "type": "string"
+          },
+          "observation": {
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "college",
+          "choice",
+          "evidence_turn_id",
+          "evidence_quote",
+          "observation",
+          "effect",
+          "comparison"
+        ],
+        "title": "JudgeVerdict",
+        "type": "object"
+      },
+      "LivenessResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "alive",
+            "default": "alive",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "LivenessResponse",
+        "type": "object"
+      },
+      "ModelErrorCode": {
+        "enum": [
+          "invalid_opponent_output",
+          "opponent_unavailable",
+          "guard_unavailable",
+          "invalid_guard_output",
+          "guard_uncertain",
+          "validator_unavailable",
+          "invalid_validator_output",
+          "validator_uncertain"
+        ],
+        "type": "string"
+      },
+      "OutcomeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DealTerms"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commitments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Commitments",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "agreement",
+              "partial_agreement",
+              "deferred",
+              "no_agreement"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
+          },
+          "open_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Points",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "summary"
+        ],
+        "title": "OutcomeResult",
+        "type": "object"
+      },
+      "PartialDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "commitments": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Commitments",
+            "type": "array"
+          },
+          "kind": {
+            "const": "partial_agreement",
+            "title": "Kind",
+            "type": "string"
+          },
+          "open_points": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Open Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "commitments",
+          "open_points"
+        ],
+        "title": "PartialDecision",
+        "type": "object"
+      },
+      "ReadinessFailureCategory": {
+        "enum": [
+          "gateway_unavailable",
+          "invalid_gateway_response",
+          "model_not_found"
+        ],
+        "type": "string"
+      },
+      "ReadinessResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadinessFailureCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "enum": [
+              "demo",
+              "qwen"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "mode"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "ServiceInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "demo",
+              "qwen"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "ServiceInfo",
+        "type": "object"
+      },
+      "SessionSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionState"
+          },
+          "transcript": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptEntry"
+            },
+            "title": "Transcript",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "state",
+          "transcript"
+        ],
+        "title": "SessionSnapshot",
+        "type": "object"
+      },
+      "SessionState": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DealTerms"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InterimDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "default": "negotiating",
+            "enum": [
+              "negotiating",
+              "agreed",
+              "partial_agreement",
+              "deferred"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "turn_count": {
+            "minimum": 0.0,
+            "title": "Turn Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_count"
+        ],
+        "title": "SessionState",
+        "type": "object"
+      },
+      "TrainerFeedback": {
+        "additionalProperties": false,
+        "properties": {
+          "mistakes": {
+            "items": {
+              "$ref": "#/components/schemas/CoachingPoint"
+            },
+            "title": "Mistakes",
+            "type": "array"
+          },
+          "next_try": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Next Try",
+            "type": "array"
+          },
+          "strengths": {
+            "items": {
+              "$ref": "#/components/schemas/CoachingPoint"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "next_try"
+        ],
+        "title": "TrainerFeedback",
+        "type": "object"
+      },
+      "TrainerSlot": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "trainer_unavailable",
+                  "invalid_trainer_output"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrainerFeedback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "TrainerSlot",
+        "type": "object"
+      },
+      "TranscriptEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuardReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "enum": [
+              "player",
+              "opponent"
+            ],
+            "title": "Speaker",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "blocked",
+              "safe_reaction"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "speaker",
+          "status",
+          "text"
+        ],
+        "title": "TranscriptEntry",
+        "type": "object"
+      },
+      "TurnRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/CaseConfig"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SessionSnapshot"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "user_text": {
+            "minLength": 1,
+            "title": "User Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case",
+          "snapshot",
+          "turn_id",
+          "user_text"
+        ],
+        "title": "TurnRequest",
+        "type": "object"
+      },
+      "TurnResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelErrorCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opponent_text": {
+            "title": "Opponent Text",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SessionSnapshot"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "blocked",
+              "model_error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "turn_id",
+          "status",
+          "opponent_text",
+          "snapshot"
+        ],
+        "title": "TurnResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Arena AI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "liveness_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness"
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "readiness_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Readiness"
+      }
+    },
+    "/v1/finish": {
+      "post": {
+        "operationId": "finish_duel_v1_finish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinishResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Finish Duel"
+      }
+    },
+    "/v1/info": {
+      "get": {
+        "operationId": "service_info_v1_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service Info"
+      }
+    },
+    "/v1/turn": {
+      "post": {
+        "operationId": "take_turn_v1_turn_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Take Turn"
+      }
+    }
+  }
+}

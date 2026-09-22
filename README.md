@@ -34,6 +34,8 @@ uv run arena-ai
 
 `GET /health/live` подтверждает работу HTTP-процесса и никогда не обращается к модели. `GET /health/ready` сразу успешен в demo-режиме, а в Qwen-режиме проверяет OpenAI-compatible `/models` и наличие настроенной модели. Неуспешная проверка отвечает 503 с одной из безопасных категорий: `gateway_unavailable`, `invalid_gateway_response` или `model_not_found`. Оба health endpoint публичны.
 
+Зафиксированная OpenAPI-схема, примеры ответов и команда black-box проверки описаны в [`docs/api/README.md`](docs/api/README.md). Black-box сценарий поднимает отдельные процессы AI-сервиса и fake gateway, поэтому для него не нужен живой Qwen.
+
 Автоматическая проверка:
 
 ```bash
