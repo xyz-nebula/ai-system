@@ -9,6 +9,7 @@ from typing import Annotated, Literal, Protocol
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 
 from arena_ai.contracts import (
     CaseConfig,
@@ -18,10 +19,13 @@ from arena_ai.contracts import (
     GuardContext,
     GuardDecision,
     GuardReason,
+    LivenessResponse,
     ModelErrorCode,
     OpponentContext,
     OpponentProposal,
     PartialDecision,
+    ReadinessFailureCategory,
+    ReadinessResponse,
     ServiceInfo,
     SessionSnapshot,
     SessionState,
@@ -47,6 +51,10 @@ class Guard(Protocol):
 
 class ProposalValidator(Protocol):
     async def assess(self, context: ValidationContext) -> object: ...
+
+
+class ReadinessProbe(Protocol):
+    async def check(self) -> ReadinessFailureCategory | None: ...
 
 
 class DemoOpponent:
@@ -212,6 +220,7 @@ def create_app(
     mode: Literal["demo", "qwen"] = "demo",
     model_id: str | None = None,
     service_token: str | None = None,
+    readiness_probe: ReadinessProbe | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -242,6 +251,35 @@ def create_app(
     @app.get("/v1/info", response_model=ServiceInfo)
     async def service_info() -> ServiceInfo:
         return ServiceInfo(mode=mode, model=model_id)
+
+    @app.get("/health/live", response_model=LivenessResponse)
+    async def liveness() -> LivenessResponse:
+        return LivenessResponse()
+
+    @app.get(
+        "/health/ready",
+        response_model=ReadinessResponse,
+        response_model_exclude_none=True,
+        responses={503: {"model": ReadinessResponse}},
+    )
+    async def readiness() -> ReadinessResponse | JSONResponse:
+        if mode == "demo":
+            return ReadinessResponse(status="ready", mode="demo")
+        category = (
+            await readiness_probe.check() if readiness_probe is not None else "gateway_unavailable"
+        )
+        result = ReadinessResponse(
+            status="ready" if category is None else "not_ready",
+            mode="qwen",
+            model=model_id,
+            category=category,
+        )
+        if category is not None:
+            return JSONResponse(
+                status_code=503,
+                content=result.model_dump(exclude_none=True),
+            )
+        return result
 
     @app.post(
         "/v1/turn",
@@ -370,7 +408,9 @@ def create_app(
             session_id=request.snapshot.session_id,
             outcome=outcome,
             judge_verdicts=await judge_duel(request.case, request.snapshot, outcome, active_judge),
-            trainer_feedback=await train_duel(request.case, request.snapshot, outcome, active_trainer),
+            trainer_feedback=await train_duel(
+                request.case, request.snapshot, outcome, active_trainer
+            ),
         )
 
     return app
@@ -397,6 +437,7 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
         mode="qwen",
         model_id=runtime.model_id,
         service_token=service_token,
+        readiness_probe=runtime.readiness,
     )
 
 

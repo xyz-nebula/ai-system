@@ -5,6 +5,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ from arena_ai.contracts import (
     JudgeVerdict,
     OpponentContext,
     OpponentProposal,
+    ReadinessFailureCategory,
     TrainerContext,
     TrainerFeedback,
     ValidationContext,
@@ -25,6 +27,22 @@ from arena_ai.contracts import (
 type JsonMode = Literal["prompt", "json_object"]
 
 JSON_FENCE = re.compile(r"```json[ \t]*\r?\n(?P<json>.*)\r?\n```", re.DOTALL)
+
+
+def models_url_from_chat_url(chat_url: str) -> str:
+    parsed = urlsplit(chat_url)
+    suffix = "/chat/completions"
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.netloc
+        or not parsed.path.endswith(suffix)
+    ):
+        raise ValueError(
+            "ARENA_QWEN_MODELS_URL is required when ARENA_QWEN_CHAT_URL "
+            "does not end with /chat/completions"
+        )
+    models_path = f"{parsed.path.removesuffix(suffix)}/models"
+    return urlunsplit((parsed.scheme, parsed.netloc, models_path, "", ""))
 
 
 def extra_body_from_env(name: str) -> dict[str, object]:
@@ -41,10 +59,12 @@ def extra_body_from_env(name: str) -> dict[str, object]:
 @dataclass(frozen=True)
 class QwenSettings:
     chat_url: str
+    models_url: str
     model: str
     api_key: str | None
     json_mode: JsonMode
     timeout_seconds: float
+    readiness_timeout_seconds: float
     fast_extra_body: dict[str, object]
     reasoned_extra_body: dict[str, object]
 
@@ -63,15 +83,68 @@ class QwenSettings:
             raise ValueError("ARENA_QWEN_TIMEOUT_SECONDS must be a positive number") from error
         if timeout <= 0:
             raise ValueError("ARENA_QWEN_TIMEOUT_SECONDS must be a positive number")
+        try:
+            readiness_timeout = float(os.environ.get("ARENA_QWEN_READINESS_TIMEOUT_SECONDS", "3"))
+        except ValueError as error:
+            raise ValueError(
+                "ARENA_QWEN_READINESS_TIMEOUT_SECONDS must be a positive number"
+            ) from error
+        if readiness_timeout <= 0:
+            raise ValueError("ARENA_QWEN_READINESS_TIMEOUT_SECONDS must be a positive number")
         return cls(
             chat_url=chat_url,
+            models_url=os.environ.get("ARENA_QWEN_MODELS_URL")
+            or models_url_from_chat_url(chat_url),
             model=model,
             api_key=os.environ.get("ARENA_QWEN_API_KEY") or None,
             json_mode=json_mode,
             timeout_seconds=timeout,
+            readiness_timeout_seconds=readiness_timeout,
             fast_extra_body=extra_body_from_env("ARENA_QWEN_FAST_EXTRA_BODY"),
             reasoned_extra_body=extra_body_from_env("ARENA_QWEN_REASONED_EXTRA_BODY"),
         )
+
+
+class QwenReadinessProbe:
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        *,
+        models_url: str,
+        model: str,
+        timeout_seconds: float,
+        api_key: str | None = None,
+    ) -> None:
+        self.http = http
+        self.models_url = models_url
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+        self.api_key = api_key
+
+    async def check(self) -> ReadinessFailureCategory | None:
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            response = await self.http.get(
+                self.models_url,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return "gateway_unavailable"
+
+        try:
+            data = response.json()
+        except ValueError:
+            return "invalid_gateway_response"
+        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+            return "invalid_gateway_response"
+        model_ids: list[str] = []
+        for item in data["data"]:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                return "invalid_gateway_response"
+            model_ids.append(item["id"])
+        return None if self.model in model_ids else "model_not_found"
 
 
 def schema_instruction(model: type[BaseModel]) -> str:
@@ -95,9 +168,10 @@ class QwenChatClient:
         if json_mode not in ("prompt", "json_object"):
             raise ValueError("Unsupported JSON mode")
         reserved = {"model", "messages", "response_format", "stream"}
-        if reserved & (fast_extra_body or {}).keys() or reserved & (
-            reasoned_extra_body or {}
-        ).keys():
+        if (
+            reserved & (fast_extra_body or {}).keys()
+            or reserved & (reasoned_extra_body or {}).keys()
+        ):
             raise ValueError("Extra body cannot override chat contract fields")
         self.http = http
         self.chat_url = chat_url
@@ -107,9 +181,7 @@ class QwenChatClient:
         self.fast_extra_body = fast_extra_body or {}
         self.reasoned_extra_body = reasoned_extra_body or {}
 
-    async def complete_json(
-        self, *, system: str, context: BaseModel, reasoned: bool
-    ) -> object:
+    async def complete_json(self, *, system: str, context: BaseModel, reasoned: bool) -> object:
         body: dict[str, object] = {
             "model": self.model,
             "messages": [

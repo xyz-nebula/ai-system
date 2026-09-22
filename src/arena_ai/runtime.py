@@ -9,6 +9,7 @@ from arena_ai.qwen import (
     QwenGuard,
     QwenJudge,
     QwenOpponent,
+    QwenReadinessProbe,
     QwenSettings,
     QwenTrainer,
     QwenValidator,
@@ -22,14 +23,17 @@ class QwenRuntime:
     validator: QwenValidator
     judge: QwenJudge
     trainer: QwenTrainer
+    readiness: QwenReadinessProbe
     owned_http: httpx.AsyncClient | None
     model_id: str
 
 
 def build_qwen_runtime(model_http: httpx.AsyncClient | None = None) -> QwenRuntime:
     settings = QwenSettings.from_env()
-    actual_http = model_http if model_http is not None else httpx.AsyncClient(
-        timeout=settings.timeout_seconds
+    actual_http = (
+        model_http
+        if model_http is not None
+        else httpx.AsyncClient(timeout=settings.timeout_seconds)
     )
     chat = QwenChatClient(
         actual_http,
@@ -46,6 +50,13 @@ def build_qwen_runtime(model_http: httpx.AsyncClient | None = None) -> QwenRunti
         validator=QwenValidator(chat),
         judge=QwenJudge(chat),
         trainer=QwenTrainer(chat),
+        readiness=QwenReadinessProbe(
+            actual_http,
+            models_url=settings.models_url,
+            model=settings.model,
+            timeout_seconds=settings.readiness_timeout_seconds,
+            api_key=settings.api_key,
+        ),
         owned_http=actual_http if model_http is None else None,
         model_id=settings.model,
     )

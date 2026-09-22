@@ -32,6 +32,8 @@ uv run arena-ai
 
 В интеграционном окружении задайте `ARENA_SERVICE_TOKEN` только через секреты процесса. Тогда `/v1/turn` и `/v1/finish` требуют заголовок `Authorization: Bearer <token>` и отвечают 401 при отсутствующем или неверном значении. Если переменная не задана или пуста, локальные вызовы остаются открытыми. `/v1/info` и `/openapi.json` публичны; значение токена сервис не возвращает.
 
+`GET /health/live` подтверждает работу HTTP-процесса и никогда не обращается к модели. `GET /health/ready` сразу успешен в demo-режиме, а в Qwen-режиме проверяет OpenAI-compatible `/models` и наличие настроенной модели. Неуспешная проверка отвечает 503 с одной из безопасных категорий: `gateway_unavailable`, `invalid_gateway_response` или `model_not_found`. Оба health endpoint публичны.
+
 Автоматическая проверка:
 
 ```bash
@@ -50,7 +52,7 @@ export ARENA_QWEN_CHAT_URL='http://HOST:PORT/v1/chat/completions'
 export ARENA_QWEN_MODEL='MODEL_ID'
 ```
 
-При необходимости задайте `ARENA_QWEN_API_KEY` в локальном окружении. `ARENA_QWEN_JSON_MODE=json_object` добавляет `response_format: {"type": "json_object"}`; значение по умолчанию `prompt` полагается на инструкцию в запросе. Для переключения reasoning на уровне вызова можно задать JSON-объекты `ARENA_QWEN_FAST_EXTRA_BODY` и `ARENA_QWEN_REASONED_EXTRA_BODY` с параметрами, которые поддерживает конкретный сервер. Таймаут задаёт `ARENA_QWEN_TIMEOUT_SECONDS` (по умолчанию 60). `/v1/info` сообщает текущий режим и идентификатор модели.
+При необходимости задайте `ARENA_QWEN_API_KEY` в локальном окружении. `ARENA_QWEN_JSON_MODE=json_object` добавляет `response_format: {"type": "json_object"}`; значение по умолчанию `prompt` полагается на инструкцию в запросе. Для переключения reasoning на уровне вызова можно задать JSON-объекты `ARENA_QWEN_FAST_EXTRA_BODY` и `ARENA_QWEN_REASONED_EXTRA_BODY` с параметрами, которые поддерживает конкретный сервер. Таймаут модельного вызова задаёт `ARENA_QWEN_TIMEOUT_SECONDS` (по умолчанию 60), а короткий таймаут readiness — `ARENA_QWEN_READINESS_TIMEOUT_SECONDS` (по умолчанию 3). По умолчанию адрес `/models` выводится из `ARENA_QWEN_CHAT_URL`; нестандартный адрес можно явно задать через `ARENA_QWEN_MODELS_URL`. `/v1/info` сообщает текущий режим и идентификатор модели.
 
 Проверенный 22 сентября 2026 года Model/Infra gateway предоставляет модель `qwen3.8-9b-q4` через OpenAI-compatible Chat Completions. При доступе через локальный SSH-туннель использовалась конфигурация:
 

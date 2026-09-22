@@ -16,6 +16,11 @@ type ModelErrorCode = Literal[
 ]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
 type GuardReason = Literal["prompt_override", "private_data_request", "hidden_position_request"]
+type ReadinessFailureCategory = Literal[
+    "gateway_unavailable",
+    "invalid_gateway_response",
+    "model_not_found",
+]
 
 
 class Contract(BaseModel):
@@ -290,3 +295,20 @@ class FinishResponse(Contract):
 class ServiceInfo(Contract):
     mode: Literal["demo", "qwen"]
     model: str | None = None
+
+
+class LivenessResponse(Contract):
+    status: Literal["alive"] = "alive"
+
+
+class ReadinessResponse(Contract):
+    status: Literal["ready", "not_ready"]
+    mode: Literal["demo", "qwen"]
+    model: str | None = None
+    category: ReadinessFailureCategory | None = None
+
+    @model_validator(mode="after")
+    def category_matches_status(self) -> Self:
+        if (self.status == "not_ready") != (self.category is not None):
+            raise ValueError("not-ready response requires a failure category")
+        return self
