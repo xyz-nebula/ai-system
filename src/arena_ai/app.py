@@ -4,10 +4,11 @@ import os
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Literal, Protocol
+from secrets import compare_digest
+from typing import Annotated, Literal, Protocol
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from arena_ai.contracts import (
     CaseConfig,
@@ -210,6 +211,7 @@ def create_app(
     owned_model_http: httpx.AsyncClient | None = None,
     mode: Literal["demo", "qwen"] = "demo",
     model_id: str | None = None,
+    service_token: str | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -224,11 +226,29 @@ def create_app(
     active_judge = judge if judge is not None else DemoJudge()
     active_trainer = trainer if trainer is not None else DemoTrainer()
 
+    async def require_service_token(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> None:
+        if service_token is None:
+            return
+        expected = f"Bearer {service_token}"
+        if authorization is None or not compare_digest(authorization, expected):
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     @app.get("/v1/info", response_model=ServiceInfo)
     async def service_info() -> ServiceInfo:
         return ServiceInfo(mode=mode, model=model_id)
 
-    @app.post("/v1/turn", response_model=TurnResponse, response_model_exclude_none=True)
+    @app.post(
+        "/v1/turn",
+        response_model=TurnResponse,
+        response_model_exclude_none=True,
+        dependencies=[Depends(require_service_token)],
+    )
     async def take_turn(request: TurnRequest) -> TurnResponse:
         if request.snapshot.state.stage != "negotiating":
             raise HTTPException(status_code=409, detail="Duel already has a decision")
@@ -337,7 +357,11 @@ def create_app(
             snapshot=snapshot,
         )
 
-    @app.post("/v1/finish", response_model=FinishResponse)
+    @app.post(
+        "/v1/finish",
+        response_model=FinishResponse,
+        dependencies=[Depends(require_service_token)],
+    )
     async def finish_duel(request: FinishRequest) -> FinishResponse:
         if not any(entry.status == "accepted" for entry in request.snapshot.transcript):
             raise HTTPException(status_code=409, detail="Duel has no accepted turns")
@@ -354,8 +378,9 @@ def create_app(
 
 def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAPI:
     mode = os.environ.get("ARENA_MODEL_MODE", "demo")
+    service_token = os.environ.get("ARENA_SERVICE_TOKEN") or None
     if mode == "demo":
-        return create_app()
+        return create_app(service_token=service_token)
     if mode != "qwen":
         raise ValueError("ARENA_MODEL_MODE must be demo or qwen")
 
@@ -371,6 +396,7 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
         owned_model_http=runtime.owned_http,
         mode="qwen",
         model_id=runtime.model_id,
+        service_token=service_token,
     )
 
 
