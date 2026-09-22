@@ -25,41 +25,35 @@ def turn_request() -> dict[str, object]:
     }
 
 
+def finish_request() -> dict[str, object]:
+    request = turn_request()
+    return {"case": request["case"], "snapshot": request["snapshot"]}
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
 
 
 @pytest.mark.anyio
-async def test_configured_service_token_rejects_missing_and_wrong_turn_credentials() -> None:
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        pytest.param("/v1/turn", turn_request(), id="turn"),
+        pytest.param("/v1/finish", finish_request(), id="finish"),
+    ],
+)
+async def test_configured_service_token_rejects_missing_and_wrong_credentials(
+    path: str,
+    payload: dict[str, object],
+) -> None:
     app = create_app(service_token="correct-token")
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
-        missing = await client.post("/v1/turn", json=turn_request())
+        missing = await client.post(path, json=payload)
         wrong = await client.post(
-            "/v1/turn",
-            json=turn_request(),
-            headers={"Authorization": "Bearer wrong-token"},
-        )
-
-    assert (missing.status_code, missing.json()) == (401, {"detail": "Unauthorized"})
-    assert (wrong.status_code, wrong.json()) == (401, {"detail": "Unauthorized"})
-
-
-@pytest.mark.anyio
-async def test_configured_service_token_rejects_missing_and_wrong_finish_credentials() -> None:
-    app = create_app(service_token="correct-token")
-    payload = {
-        "case": turn_request()["case"],
-        "snapshot": turn_request()["snapshot"],
-    }
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        missing = await client.post("/v1/finish", json=payload)
-        wrong = await client.post(
-            "/v1/finish",
+            path,
             json=payload,
             headers={"Authorization": "Bearer wrong-token"},
         )
