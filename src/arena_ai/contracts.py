@@ -1,6 +1,6 @@
 """Contracts for text turns and factual duel outcomes."""
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,6 +21,7 @@ type ReadinessFailureCategory = Literal[
     "invalid_gateway_response",
     "model_not_found",
 ]
+type NonEmptyText = Annotated[str, Field(min_length=1)]
 
 
 class Contract(BaseModel):
@@ -143,9 +144,31 @@ class OpponentProposal(Contract):
         return self
 
 
+class PreparationCard(Contract):
+    situation_analysis: str | None = Field(default=None, min_length=1)
+    strategic_goal: str | None = Field(default=None, min_length=1)
+    negotiation_goal: str | None = Field(default=None, min_length=1)
+    planned_questions: list[NonEmptyText] = Field(default_factory=list)
+    possible_solutions: list[NonEmptyText] = Field(default_factory=list)
+    arguments: list[NonEmptyText] = Field(default_factory=list)
+
+    def has_content(self) -> bool:
+        return any(
+            (
+                self.situation_analysis,
+                self.strategic_goal,
+                self.negotiation_goal,
+                self.planned_questions,
+                self.possible_solutions,
+                self.arguments,
+            )
+        )
+
+
 class FinishRequest(Contract):
     case: CaseConfig
     snapshot: SessionSnapshot
+    preparation: PreparationCard | None = None
 
 
 class OutcomeResult(Contract):
@@ -248,6 +271,7 @@ class TrainerContext(Contract):
     state: SessionState
     transcript: list[TranscriptEntry]
     outcome: OutcomeResult
+    preparation: PreparationCard | None = None
 
 
 class CoachingPoint(Contract):

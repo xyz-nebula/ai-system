@@ -206,6 +206,16 @@
           "case": {
             "$ref": "#/components/schemas/CaseConfig"
           },
+          "preparation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "snapshot": {
             "$ref": "#/components/schemas/SessionSnapshot"
           }
@@ -410,6 +420,10 @@
         ],
         "type": "string"
       },
+      "NonEmptyText": {
+        "minLength": 1,
+        "type": "string"
+      },
       "OutcomeResult": {
         "additionalProperties": false,
         "properties": {
@@ -512,6 +526,70 @@
           "open_points"
         ],
         "title": "PartialDecision",
+        "type": "object"
+      },
+      "PreparationCard": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "title": "Arguments",
+            "type": "array"
+          },
+          "negotiation_goal": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Goal"
+          },
+          "planned_questions": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "title": "Planned Questions",
+            "type": "array"
+          },
+          "possible_solutions": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "title": "Possible Solutions",
+            "type": "array"
+          },
+          "situation_analysis": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Situation Analysis"
+          },
+          "strategic_goal": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategic Goal"
+          }
+        },
+        "title": "PreparationCard",
         "type": "object"
       },
       "ReadinessFailureCategory": {

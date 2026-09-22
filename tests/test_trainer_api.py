@@ -104,6 +104,11 @@ class BlockedTurnTrainer:
         }
 
 
+class UnexpectedOpponent:
+    async def respond(self, context: object) -> object:
+        raise AssertionError("preparation must not trigger the opponent")
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -129,6 +134,96 @@ async def test_trainer_has_separate_public_call_and_grounded_feedback() -> None:
     assert feedback["next_try"]
     assert "plan_vs_reality" not in feedback
     assert len(result["judge_verdicts"]) == 3
+
+
+@pytest.mark.anyio
+async def test_finish_sends_partial_preparation_to_the_trainer() -> None:
+    trainer = RecordingTrainer()
+    app = create_app(trainer=trainer)
+    payload = {
+        "case": CASE,
+        "snapshot": SNAPSHOT,
+        "preparation": {
+            "negotiation_goal": "Согласовать измеримые условия повышения.",
+            "planned_questions": ["Какие KPI подтвердят готовность к новой роли?"],
+        },
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/finish", json=payload)
+
+    assert response.status_code == 200
+    assert len(trainer.contexts) == 1
+    preparation = trainer.contexts[0].preparation
+    assert preparation is not None
+    assert preparation.negotiation_goal == "Согласовать измеримые условия повышения."
+    assert preparation.planned_questions == ["Какие KPI подтвердят готовность к новой роли?"]
+    assert "preparation" not in response.json()["trainer_feedback"]["feedback"]
+
+
+@pytest.mark.anyio
+async def test_empty_preparation_is_the_same_as_no_preparation() -> None:
+    trainer = RecordingTrainer()
+    app = create_app(trainer=trainer)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={"case": CASE, "snapshot": SNAPSHOT, "preparation": {}},
+        )
+
+    assert response.status_code == 200
+    assert trainer.contexts[0].preparation is None
+    assert "plan_vs_reality" not in response.json()["trainer_feedback"]["feedback"]
+
+
+@pytest.mark.anyio
+async def test_preparation_rejects_an_empty_planned_item() -> None:
+    app = create_app()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "preparation": {"arguments": [""]},
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_preparation_is_only_accepted_when_finishing_for_the_trainer() -> None:
+    trainer = RecordingTrainer()
+    app = create_app(opponent=UnexpectedOpponent(), trainer=trainer)
+    preparation = {"strategic_goal": "private-preparation-marker"}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        turn = await client.post(
+            "/v1/turn",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "turn_id": "turn-with-preparation",
+                "user_text": "Обсудим условия повышения.",
+                "preparation": preparation,
+            },
+        )
+        finish = await client.post(
+            "/v1/finish",
+            json={"case": CASE, "snapshot": SNAPSHOT, "preparation": preparation},
+        )
+
+    assert turn.status_code == 422
+    assert finish.status_code == 200
+    assert trainer.contexts[0].preparation is not None
+    assert trainer.contexts[0].preparation.strategic_goal == "private-preparation-marker"
 
 
 @pytest.mark.anyio

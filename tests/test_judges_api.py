@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import cast
 
 import httpx
 import pytest
@@ -115,6 +116,25 @@ async def test_three_judges_receive_isolated_rubrics_and_public_case_view() -> N
     assert len(judge.contexts) == 3
     assert len({context.rubric for context in judge.contexts}) == 3
     assert len({repr(context.transcript) for context in judge.contexts}) == 1
+
+
+@pytest.mark.anyio
+async def test_preparation_is_not_shared_with_judges() -> None:
+    payload = cast(dict[str, object], deepcopy(FINISH_PAYLOAD))
+    payload["preparation"] = {
+        "strategic_goal": "private-preparation-marker",
+        "arguments": ["Обсудить измеримые условия повышения."],
+    }
+    judge = RecordingJudge()
+    app = create_app(judge=judge)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/finish", json=payload)
+
+    assert response.status_code == 200
+    assert len(judge.contexts) == 3
+    assert all("private-preparation-marker" not in repr(context) for context in judge.contexts)
 
 
 @pytest.mark.anyio

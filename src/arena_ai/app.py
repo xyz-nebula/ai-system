@@ -414,7 +414,11 @@ def create_app(
             outcome=outcome,
             judge_verdicts=await judge_duel(request.case, request.snapshot, outcome, active_judge),
             trainer_feedback=await train_duel(
-                request.case, request.snapshot, outcome, active_trainer
+                request.case,
+                request.snapshot,
+                outcome,
+                active_trainer,
+                request.preparation,
             ),
         )
 

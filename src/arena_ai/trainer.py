@@ -5,6 +5,7 @@ from typing import Protocol
 from arena_ai.contracts import (
     CaseConfig,
     OutcomeResult,
+    PreparationCard,
     SessionSnapshot,
     TrainerContext,
     TrainerFeedback,
@@ -85,7 +86,10 @@ async def train_duel(
     snapshot: SessionSnapshot,
     outcome: OutcomeResult,
     trainer: Trainer,
+    preparation: PreparationCard | None = None,
 ) -> TrainerSlot:
+    if preparation is not None and not preparation.has_content():
+        preparation = None
     context = TrainerContext(
         case_id=case.id,
         case_title=case.title,
@@ -95,6 +99,7 @@ async def train_duel(
         state=snapshot.state,
         transcript=public_transcript(snapshot.transcript),
         outcome=outcome,
+        preparation=preparation,
     )
     try:
         raw_feedback = await trainer.feedback(context)
