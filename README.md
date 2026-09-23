@@ -129,3 +129,44 @@ uv run pytest \
   tests/black_box/test_managed_turn_process.py::test_live_evaluation_cli_reports_a_passing_fixed_case \
   -q
 ```
+
+## Qdrant и Qwen3 Embeddings
+
+Серверный dev-стек retrieval описан в `deploy/rag/compose.yaml`. Он не использует и не изменяет
+существующий LocalAI: Qdrant и embeddings работают отдельными контейнерами. Все порты привязаны к
+loopback сервера и не должны открываться в интернет или WireGuard напрямую.
+
+На сервере из checkout `ai-system` запустите:
+
+```bash
+docker compose -f deploy/rag/compose.yaml pull
+docker compose -f deploy/rag/compose.yaml up -d
+docker compose -f deploy/rag/compose.yaml ps
+```
+
+По умолчанию используется CPU-образ TEI и `Qwen/Qwen3-Embedding-0.6B`. Первый запуск скачивает
+образ и около 1.2 GB весов модели, поэтому readiness embeddings может появиться не сразу. Значения
+`ARENA_EMBEDDINGS_IMAGE` и `ARENA_EMBEDDINGS_MODEL` позволяют Infra выбрать другой официальный
+образ или размер модели после проверки ресурсов сервера. Для практичного CPU-прогрева batch
+ограничен 2048 токенами; при необходимости лимит меняется через
+`ARENA_EMBEDDINGS_MAX_BATCH_TOKENS`.
+
+На локальной машине откройте туннель через выданный SSH account:
+
+```bash
+ssh -N -T \
+  -p 8022 \
+  -o ExitOnForwardFailure=yes \
+  -L 6333:127.0.0.1:6333 \
+  -L 8081:127.0.0.1:8081 \
+  farrahovd234@2.26.27.230
+```
+
+Пока туннель открыт, полный smoke test запускается локально:
+
+```bash
+uv run python scripts/check_rag_stack.py
+```
+
+Проверка создаёт уникальную временную коллекцию, строит embeddings тестовых русскоязычных
+фрагментов, выполняет semantic search и удаляет только свою временную коллекцию.
