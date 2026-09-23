@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
@@ -49,8 +50,8 @@ def stop_process(process: subprocess.Popen[str] | None) -> None:
         process.wait(timeout=5)
 
 
-@pytest.fixture
-def ai_service_url() -> Iterator[str]:
+@contextmanager
+def running_ai_service(model_id: str = "qwen-black-box") -> Iterator[str]:
     gateway_port = free_port()
     service_port = free_port()
     gateway_process = subprocess.Popen(
@@ -68,7 +69,7 @@ def ai_service_url() -> Iterator[str]:
             {
                 "ARENA_MODEL_MODE": "qwen",
                 "ARENA_QWEN_CHAT_URL": (f"http://127.0.0.1:{gateway_port}/v1/chat/completions"),
-                "ARENA_QWEN_MODEL": "qwen-black-box",
+                "ARENA_QWEN_MODEL": model_id,
                 "ARENA_QWEN_JSON_MODE": "prompt",
                 "ARENA_QWEN_TIMEOUT_SECONDS": "2",
                 "ARENA_QWEN_READINESS_TIMEOUT_SECONDS": "1",
@@ -106,6 +107,18 @@ def ai_service_url() -> Iterator[str]:
     finally:
         stop_process(service_process)
         stop_process(gateway_process)
+
+
+@pytest.fixture
+def ai_service_url() -> Iterator[str]:
+    with running_ai_service() as service_url:
+        yield service_url
+
+
+@pytest.fixture
+def failing_finish_ai_service_url() -> Iterator[str]:
+    with running_ai_service("qwen-black-box-failing-finish") as service_url:
+        yield service_url
 
 
 def test_managed_turn_contract_through_independent_http_processes(ai_service_url: str) -> None:
@@ -182,6 +195,11 @@ def test_live_evaluation_cli_reports_a_passing_fixed_case(
     report = json.loads(completed.stdout)
     assert report["scenario_id"] == "next-day-strong-agreement"
     assert report["service"] == {"mode": "qwen", "model": "qwen-black-box"}
+    assert report["readiness"] == {
+        "status": "ready",
+        "mode": "qwen",
+        "model": "qwen-black-box",
+    }
     assert report["runs_requested"] == 1
     assert report["summary"] == {"passed": 1, "failed": 0}
     assert report["runs"][0]["status"] == "passed"
@@ -191,11 +209,11 @@ def test_live_evaluation_cli_reports_a_passing_fixed_case(
     ]
     assert report["runs"][0]["outcome_kind"] == "agreement"
     assert report["runs"][0]["judge_slots"] == {
-        "hiring": "ready",
-        "negotiation": "ready",
-        "ownership": "ready",
+        "hiring": {"status": "ready", "error_code": None},
+        "negotiation": {"status": "ready", "error_code": None},
+        "ownership": {"status": "ready", "error_code": None},
     }
-    assert report["runs"][0]["trainer_status"] == "ready"
+    assert report["runs"][0]["trainer"] == {"status": "ready", "error_code": None}
     assert all(report["runs"][0]["checks"].values())
     assert json.loads(report_path.read_text()) == report
 
@@ -240,3 +258,79 @@ def test_live_evaluation_cli_reports_a_failed_run_without_leaking_token(
     ]
     assert wrong_token not in completed.stdout
     assert wrong_token not in completed.stderr
+
+
+def test_live_evaluation_cli_keeps_safe_finish_failure_codes(
+    failing_finish_ai_service_url: str,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            failing_finish_ai_service_url,
+            "--runs",
+            "1",
+            "--timeout",
+            "5",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    report = json.loads(completed.stdout)
+    assert report["runs"][0]["judge_slots"]["ownership"] == {
+        "status": "failed",
+        "error_code": "invalid_judge_output",
+    }
+    assert report["runs"][0]["trainer"] == {
+        "status": "failed",
+        "error_code": "trainer_unavailable",
+    }
+    assert "provider-private-diagnostic" not in completed.stdout
+
+
+def test_live_evaluation_cli_saves_a_safe_report_when_service_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    unavailable_url = f"http://127.0.0.1:{free_port()}"
+    report_path = tmp_path / "unavailable.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            unavailable_url,
+            "--runs",
+            "1",
+            "--timeout",
+            "0.1",
+            "--output",
+            str(report_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    report = json.loads(completed.stdout)
+    assert report == json.loads(report_path.read_text())
+    assert report["service"] is None
+    assert report["readiness"] is None
+    assert report["startup_error"] == "ConnectError"
+    assert report["summary"] == {"passed": 0, "failed": 1}
+    assert report["runs"] == []

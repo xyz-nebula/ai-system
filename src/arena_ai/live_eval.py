@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import math
 import os
 from collections import Counter
 from pathlib import Path
@@ -11,11 +10,9 @@ from uuid import uuid4
 
 import httpx
 
-from arena_ai.cli import DEMO_CASE
+from arena_ai.cli_args import positive_timeout
 from arena_ai.contracts import (
-    CaseConfig,
     FinishResponse,
-    PreparationCard,
     ReadinessResponse,
     ServiceInfo,
     SessionSnapshot,
@@ -23,23 +20,13 @@ from arena_ai.contracts import (
     TranscriptEntry,
     TurnResponse,
 )
+from arena_ai.scenarios import (
+    NEXT_DAY_CASE,
+    NEXT_DAY_STRONG_PREPARATION,
+    NEXT_DAY_STRONG_TURNS,
+)
 
 SCENARIO_ID = "next-day-strong-agreement"
-SCENARIO_CASE = CaseConfig.model_validate(DEMO_CASE)
-SCENARIO_TURNS = (
-    (
-        "Понимаю ваши сомнения. Это было отравление, и я готов компенсировать последствия "
-        "пропуска и подтвердить ответственность измеримым результатом."
-    ),
-    (
-        "Предлагаю 2 недели контрольного периода с KPI 120% и автоматическим повышением "
-        "после выполнения. Согласны?"
-    ),
-)
-SCENARIO_PREPARATION = PreparationCard(
-    negotiation_goal="Согласовать измеримые условия автоматического повышения.",
-    planned_questions=["Какие срок и KPI подтвердят мою готовность?"],
-)
 CHECK_NAMES = (
     "all_turns_accepted",
     "snapshot_consistent",
@@ -59,16 +46,6 @@ def positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError("Значение должно быть целым числом") from error
     if result <= 0:
         raise argparse.ArgumentTypeError("Значение должно быть положительным")
-    return result
-
-
-def positive_timeout(value: str) -> float:
-    try:
-        result = float(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("Тайм-аут должен быть числом секунд") from error
-    if not math.isfinite(result) or result <= 0:
-        raise argparse.ArgumentTypeError("Тайм-аут должен быть положительным")
     return result
 
 
@@ -107,12 +84,17 @@ def snapshot_is_consistent(snapshot: SessionSnapshot, turn_ids: list[str]) -> bo
 def evaluate_finish(
     finished: FinishResponse | None,
     snapshot: SessionSnapshot,
-) -> tuple[dict[str, bool], dict[str, str], str | None, str | None]:
+) -> tuple[
+    dict[str, bool],
+    dict[str, dict[str, str | None]],
+    str | None,
+    dict[str, str | None] | None,
+]:
     checks = {name: False for name in CHECK_NAMES[2:]}
     if finished is None:
         return checks, {}, None, None
 
-    rules = SCENARIO_CASE.agreement_rules
+    rules = NEXT_DAY_CASE.agreement_rules
     agreement = finished.outcome.agreement
     checks["agreement_within_rules"] = bool(
         finished.outcome.kind == "agreement"
@@ -122,14 +104,15 @@ def evaluate_finish(
         and agreement.automatic_raise
     )
 
-    judge_slots: dict[str, str] = {
-        slot.college: slot.status for slot in finished.judge_verdicts
+    judge_slots: dict[str, dict[str, str | None]] = {
+        slot.college: {"status": slot.status, "error_code": slot.error_code}
+        for slot in finished.judge_verdicts
     }
-    checks["three_judges_ready"] = judge_slots == {
-        "hiring": "ready",
-        "negotiation": "ready",
-        "ownership": "ready",
-    }
+    checks["three_judges_ready"] = set(judge_slots) == {
+        "hiring",
+        "negotiation",
+        "ownership",
+    } and all(slot["status"] == "ready" for slot in judge_slots.values())
     checks["judge_evidence_grounded"] = len(finished.judge_verdicts) == 3 and all(
         slot.verdict is not None
         and evidence_is_grounded(
@@ -157,14 +140,15 @@ def evaluate_finish(
         comparison = trainer.feedback.plan_vs_reality
         if comparison is not None:
             expected = Counter(
-                (item.kind, item.text) for item in SCENARIO_PREPARATION.comparison_items()
+                (item.kind, item.text) for item in NEXT_DAY_STRONG_PREPARATION.comparison_items()
             )
             actual = Counter(
                 (item.preparation_kind, item.preparation_text) for item in comparison.items
             )
             checks["preparation_covered"] = actual == expected
 
-    return checks, judge_slots, finished.outcome.kind, trainer.status
+    trainer_report = {"status": trainer.status, "error_code": trainer.error_code}
+    return checks, judge_slots, finished.outcome.kind, trainer_report
 
 
 def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
@@ -176,13 +160,13 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
     turn_results: list[dict[str, object]] = []
     accepted_turn_ids: list[str] = []
 
-    for sequence, user_text in enumerate(SCENARIO_TURNS, start=1):
+    for sequence, user_text in enumerate(NEXT_DAY_STRONG_TURNS, start=1):
         turn_id = str(uuid4())
         try:
             response = client.post(
                 "/v1/turn",
                 json={
-                    "case": SCENARIO_CASE.model_dump(mode="json"),
+                    "case": NEXT_DAY_CASE.model_dump(mode="json"),
                     "snapshot": snapshot.model_dump(mode="json"),
                     "turn_id": turn_id,
                     "user_text": user_text,
@@ -212,10 +196,10 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
         accepted_turn_ids.append(turn_id)
 
     checks = {
-        "all_turns_accepted": len(turn_results) == len(SCENARIO_TURNS)
+        "all_turns_accepted": len(turn_results) == len(NEXT_DAY_STRONG_TURNS)
         and all(turn["status"] == "accepted" for turn in turn_results),
         "snapshot_consistent": snapshot_is_consistent(snapshot, accepted_turn_ids)
-        and len(accepted_turn_ids) == len(SCENARIO_TURNS),
+        and len(accepted_turn_ids) == len(NEXT_DAY_STRONG_TURNS),
     }
     finished: FinishResponse | None = None
     finish_error: str | None = None
@@ -224,9 +208,9 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
             response = client.post(
                 "/v1/finish",
                 json={
-                    "case": SCENARIO_CASE.model_dump(mode="json"),
+                    "case": NEXT_DAY_CASE.model_dump(mode="json"),
                     "snapshot": snapshot.model_dump(mode="json"),
-                    "preparation": SCENARIO_PREPARATION.filled_fields(),
+                    "preparation": NEXT_DAY_STRONG_PREPARATION.filled_fields(),
                 },
             )
             response.raise_for_status()
@@ -234,7 +218,7 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
         except (httpx.HTTPError, ValueError) as error:
             finish_error = type(error).__name__
 
-    finish_checks, judge_slots, outcome_kind, trainer_status = evaluate_finish(
+    finish_checks, judge_slots, outcome_kind, trainer = evaluate_finish(
         finished, snapshot
     )
     checks.update(finish_checks)
@@ -245,33 +229,82 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
         "finish_error": finish_error,
         "outcome_kind": outcome_kind,
         "judge_slots": judge_slots,
-        "trainer_status": trainer_status,
+        "trainer": trainer,
         "checks": checks,
     }
 
 
-def execute(api_url: str, runs: int, timeout: float) -> dict[str, Any]:
-    token = os.environ.get("ARENA_SERVICE_TOKEN")
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    with httpx.Client(base_url=api_url, headers=headers, timeout=timeout) as client:
-        readiness_response = client.get("/health/ready")
-        readiness_response.raise_for_status()
-        readiness = ReadinessResponse.model_validate(readiness_response.json())
-        if readiness.status != "ready":
-            raise RuntimeError("AI service is not ready")
-        info_response = client.get("/v1/info")
-        info_response.raise_for_status()
-        info = ServiceInfo.model_validate(info_response.json())
-        results = [run_once(client, number) for number in range(1, runs + 1)]
-
-    passed = sum(result["status"] == "passed" for result in results)
+def report_for(
+    runs_requested: int,
+    *,
+    service: ServiceInfo | None,
+    readiness: ReadinessResponse | None,
+    startup_error: str | None,
+    runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    passed = sum(run["status"] == "passed" for run in runs)
+    failed = runs_requested - passed
     return {
         "scenario_id": SCENARIO_ID,
-        "service": info.model_dump(mode="json"),
-        "runs_requested": runs,
-        "summary": {"passed": passed, "failed": runs - passed},
-        "runs": results,
+        "service": None if service is None else service.model_dump(mode="json"),
+        "readiness": (
+            None
+            if readiness is None
+            else readiness.model_dump(mode="json", exclude_none=True)
+        ),
+        "startup_error": startup_error,
+        "runs_requested": runs_requested,
+        "summary": {"passed": passed, "failed": failed},
+        "runs": runs,
     }
+
+
+def execute(api_url: str, runs: int, timeout: float) -> tuple[dict[str, Any], int]:
+    token = os.environ.get("ARENA_SERVICE_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    service: ServiceInfo | None = None
+    readiness: ReadinessResponse | None = None
+    try:
+        with httpx.Client(base_url=api_url, headers=headers, timeout=timeout) as client:
+            info_response = client.get("/v1/info")
+            info_response.raise_for_status()
+            service = ServiceInfo.model_validate(info_response.json())
+
+            readiness_response = client.get("/health/ready")
+            readiness = ReadinessResponse.model_validate(readiness_response.json())
+            if readiness_response.is_error or readiness.status != "ready":
+                startup_error = readiness.category or "HTTPStatusError"
+                return (
+                    report_for(
+                        runs,
+                        service=service,
+                        readiness=readiness,
+                        startup_error=startup_error,
+                        runs=[],
+                    ),
+                    2,
+                )
+            results = [run_once(client, number) for number in range(1, runs + 1)]
+    except (httpx.HTTPError, ValueError) as error:
+        return (
+            report_for(
+                runs,
+                service=service,
+                readiness=readiness,
+                startup_error=type(error).__name__,
+                runs=[],
+            ),
+            2,
+        )
+
+    report = report_for(
+        runs,
+        service=service,
+        readiness=readiness,
+        startup_error=None,
+        runs=results,
+    )
+    return report, 0 if report["summary"]["failed"] == 0 else 1
 
 
 def main() -> None:
@@ -284,16 +317,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    try:
-        report = execute(args.api_url, args.runs, args.timeout)
-    except (httpx.HTTPError, RuntimeError, ValueError) as error:
-        parser.exit(2, f"Не удалось запустить оценку: {type(error).__name__}\n")
-
+    report, exit_code = execute(args.api_url, args.runs, args.timeout)
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output is not None:
-        args.output.write_text(f"{rendered}\n", encoding="utf-8")
+        try:
+            args.output.write_text(f"{rendered}\n", encoding="utf-8")
+        except OSError as error:
+            parser.exit(2, f"Не удалось сохранить отчёт: {type(error).__name__}\n")
     print(rendered)
-    raise SystemExit(0 if report["summary"]["failed"] == 0 else 1)
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

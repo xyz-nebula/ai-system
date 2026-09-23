@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 MODEL_ID = "qwen-black-box"
+FAILURE_MODEL_ID = "qwen-black-box-failing-finish"
 
 
 class FakeOpenAIHandler(BaseHTTPRequestHandler):
@@ -23,7 +24,13 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if urlsplit(self.path).path == "/v1/models":
-            self.send_json(HTTPStatus.OK, {"object": "list", "data": [{"id": MODEL_ID}]})
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "object": "list",
+                    "data": [{"id": MODEL_ID}, {"id": FAILURE_MODEL_ID}],
+                },
+            )
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": {"message": "not found"}})
 
@@ -34,6 +41,7 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             request = json.loads(self.rfile.read(length))
+            model = request["model"]
             messages = request["messages"]
             system = messages[0]["content"]
             context = json.loads(messages[1]["content"])
@@ -88,16 +96,27 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                 for entry in context["transcript"]
                 if entry["speaker"] == "player" and entry["status"] == "accepted"
             )
-            completion = {
-                "college": context["college"],
-                "choice": "player",
-                "evidence_turn_id": evidence["turn_id"],
-                "evidence_quote": evidence["text"],
-                "observation": "Менеджер признал сомнения и предложил измеримую ответственность.",
-                "effect": "Разговор перешёл к проверяемым условиям.",
-                "comparison": "Менеджер дал более конкретное предложение.",
-            }
+            if model == FAILURE_MODEL_ID and context["college"] == "ownership":
+                completion = {}
+            else:
+                completion = {
+                    "college": context["college"],
+                    "choice": "player",
+                    "evidence_turn_id": evidence["turn_id"],
+                    "evidence_quote": evidence["text"],
+                    "observation": (
+                        "Менеджер признал сомнения и предложил измеримую ответственность."
+                    ),
+                    "effect": "Разговор перешёл к проверяемым условиям.",
+                    "comparison": "Менеджер дал более конкретное предложение.",
+                }
         elif system.startswith("[ARENA_TRAINER]"):
+            if model == FAILURE_MODEL_ID:
+                self.send_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": {"message": "provider-private-diagnostic"}},
+                )
+                return
             evidence = next(
                 entry
                 for entry in context["transcript"]

@@ -1,12 +1,12 @@
 """Terminal client for exercising the public AI service API."""
 
 import argparse
-import math
 from pathlib import Path
 from uuid import uuid4
 
 import httpx
 
+from arena_ai.cli_args import positive_timeout
 from arena_ai.contracts import (
     FinishResponse,
     PreparationCard,
@@ -16,46 +16,7 @@ from arena_ai.contracts import (
     SessionState,
     TurnResponse,
 )
-
-DEMO_CASE = {
-    "id": "next-day",
-    "title": "На следующий день...",
-    "shared_context": (
-        "Результативный Менеджер по продажам договорился с Генеральным директором о повышении "
-        "зарплаты при выполнении KPI. На следующий день Менеджер не вышел на работу и сообщил "
-        "об отравлении. Директор сомневается в его готовности к большей ответственности."
-    ),
-    "player_role": "Менеджер",
-    "opponent_role": "Генеральный директор",
-    "player_private_context": (
-        "Сохранить договорённость о повышении и рабочие отношения. Готов компенсировать "
-        "последствия пропуска. Максимальная уступка — один контрольный месяц с заранее "
-        "согласованными KPI и автоматическим повышением после их выполнения."
-    ),
-    "opponent_private_context": (
-        "Добиться подтверждения ответственности Менеджера. Начать с предложения контрольного "
-        "месяца и KPI 130%; желательная сделка — две недели и KPI 120%. Не соглашаться "
-        "на повышение раньше одной контрольной недели."
-    ),
-    "opponent_private_phrases": ["желательная сделка", "не соглашаться на повышение"],
-    "agreement_rules": {
-        "min_control_weeks": 1,
-        "max_control_weeks": 4,
-        "min_kpi_percent": 100,
-        "max_kpi_percent": 130,
-        "require_automatic_raise": True,
-    },
-}
-
-
-def positive_timeout(value: str) -> float:
-    try:
-        seconds = float(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("Таймаут должен быть числом секунд") from error
-    if not math.isfinite(seconds) or seconds <= 0:
-        raise argparse.ArgumentTypeError("Таймаут должен быть положительным")
-    return seconds
+from arena_ai.scenarios import NEXT_DAY_CASE
 
 
 def load_preparation(path: Path | None) -> PreparationCard | None:
@@ -97,10 +58,10 @@ def main() -> None:
     snapshot = SessionSnapshot(
         session_id=str(uuid4()), state=SessionState(turn_count=0), transcript=[]
     )
-    print(f"Кейс: {DEMO_CASE['title']}")
-    print(f"\nОбщие вводные: {DEMO_CASE['shared_context']}")
-    print(f"\nВаша роль — {DEMO_CASE['player_role']}.")
-    print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
+    print(f"Кейс: {NEXT_DAY_CASE.title}")
+    print(f"\nОбщие вводные: {NEXT_DAY_CASE.shared_context}")
+    print(f"\nВаша роль — {NEXT_DAY_CASE.player_role}.")
+    print(f"Ваши вводные: {NEXT_DAY_CASE.player_private_context}")
     with httpx.Client(base_url=args.api_url, timeout=10.0) as client:
         try:
             info_response = client.get("/v1/info")
@@ -125,7 +86,7 @@ def main() -> None:
             if user_text == ":finish":
                 try:
                     finish_body: dict[str, object] = {
-                        "case": DEMO_CASE,
+                        "case": NEXT_DAY_CASE.model_dump(mode="json"),
                         "snapshot": snapshot.model_dump(mode="json"),
                     }
                     if preparation is not None:
@@ -224,7 +185,7 @@ def main() -> None:
                 response = client.post(
                     "/v1/turn",
                     json={
-                        "case": DEMO_CASE,
+                        "case": NEXT_DAY_CASE.model_dump(mode="json"),
                         "snapshot": snapshot.model_dump(mode="json"),
                         "turn_id": str(uuid4()),
                         "user_text": user_text,
