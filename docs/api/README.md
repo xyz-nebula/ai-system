@@ -32,3 +32,7 @@ uv run pytest tests/black_box/test_managed_turn_process.py -q
 ```bash
 uv run pytest tests/test_cli_preparation.py tests/test_contract_artifacts.py -q
 ```
+
+Повторяемая оценка живого контура использует те же публичные операции и не обращается к модели
+напрямую. Команда и трактовка JSON-отчёта описаны в разделе
+«Повторяемая оценка живого контура» корневого `README.md`.

@@ -57,13 +57,89 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
             else:
                 completion = {"decision": "allow", "reason": None}
         elif system.startswith("[ARENA_OPPONENT]"):
-            completion = {
-                "text": "Давайте согласуем измеримые условия.",
-                "agreement": None,
-                "decision": None,
-            }
+            if "2 недели" in user_text and "120%" in user_text:
+                completion = {
+                    "text": (
+                        "Согласен: 2 недели контроля, KPI 120% и автоматическое повышение "
+                        "после выполнения. Договорились."
+                    ),
+                    "agreement": {
+                        "control_weeks": 2,
+                        "kpi_percent": 120,
+                        "automatic_raise": True,
+                        "employee_commitments": ["Выполнить KPI 120% за две недели."],
+                        "director_commitments": [
+                            "Автоматически оформить повышение после выполнения KPI."
+                        ],
+                    },
+                    "decision": None,
+                }
+            else:
+                completion = {
+                    "text": "Давайте согласуем измеримые условия.",
+                    "agreement": None,
+                    "decision": None,
+                }
         elif system.startswith("[ARENA_VALIDATOR]"):
             completion = {"decision": "accept"}
+        elif system.startswith("[ARENA_JUDGE]"):
+            evidence = next(
+                entry
+                for entry in context["transcript"]
+                if entry["speaker"] == "player" and entry["status"] == "accepted"
+            )
+            completion = {
+                "college": context["college"],
+                "choice": "player",
+                "evidence_turn_id": evidence["turn_id"],
+                "evidence_quote": evidence["text"],
+                "observation": "Менеджер признал сомнения и предложил измеримую ответственность.",
+                "effect": "Разговор перешёл к проверяемым условиям.",
+                "comparison": "Менеджер дал более конкретное предложение.",
+            }
+        elif system.startswith("[ARENA_TRAINER]"):
+            evidence = next(
+                entry
+                for entry in context["transcript"]
+                if entry["speaker"] == "player" and entry["status"] == "accepted"
+            )
+            preparation = context["preparation"]
+            comparison_items = [
+                {
+                    "preparation_kind": "negotiation_goal",
+                    "preparation_text": preparation["negotiation_goal"],
+                    "status": "followed",
+                    "evidence_turn_id": evidence["turn_id"],
+                    "evidence_quote": evidence["text"],
+                    "observation": "Менеджер двигался к измеримым условиям.",
+                },
+                {
+                    "preparation_kind": "planned_question",
+                    "preparation_text": preparation["planned_questions"][0],
+                    "status": "adapted",
+                    "evidence_turn_id": evidence["turn_id"],
+                    "evidence_quote": evidence["text"],
+                    "observation": "Подготовленный вопрос превратился в предложение.",
+                },
+            ]
+            completion = {
+                "summary": "Менеджер перевёл сомнения в измеримые условия.",
+                "strengths": [
+                    {
+                        "evidence_turn_id": evidence["turn_id"],
+                        "evidence_quote": evidence["text"],
+                        "action": "Признал сомнения директора.",
+                        "situation_change": "Снизил напряжение.",
+                        "consequence": "Стало возможно обсуждать условия.",
+                    }
+                ],
+                "mistakes": [],
+                "next_try": ["Уточнить критерий проверки KPI."],
+                "plan_vs_reality": {
+                    "summary": "Оба элемента подготовки проявились в разговоре.",
+                    "items": comparison_items,
+                },
+            }
         else:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": {"message": "unknown role"}})
             return

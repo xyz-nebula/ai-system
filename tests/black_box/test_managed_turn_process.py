@@ -147,3 +147,96 @@ def test_managed_turn_contract_through_independent_http_processes(ai_service_url
         assert response.status_code == documented["status_code"]
         assert response.json() == documented["body"]
     assert "provider-private-diagnostic" not in responses["model_error"].text
+
+
+def test_live_evaluation_cli_reports_a_passing_fixed_case(
+    ai_service_url: str, tmp_path: Path
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    report_path = tmp_path / "live-eval.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            ai_service_url,
+            "--runs",
+            "1",
+            "--timeout",
+            "5",
+            "--output",
+            str(report_path),
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads(completed.stdout)
+    assert report["scenario_id"] == "next-day-strong-agreement"
+    assert report["service"] == {"mode": "qwen", "model": "qwen-black-box"}
+    assert report["runs_requested"] == 1
+    assert report["summary"] == {"passed": 1, "failed": 0}
+    assert report["runs"][0]["status"] == "passed"
+    assert [turn["status"] for turn in report["runs"][0]["turns"]] == [
+        "accepted",
+        "accepted",
+    ]
+    assert report["runs"][0]["outcome_kind"] == "agreement"
+    assert report["runs"][0]["judge_slots"] == {
+        "hiring": "ready",
+        "negotiation": "ready",
+        "ownership": "ready",
+    }
+    assert report["runs"][0]["trainer_status"] == "ready"
+    assert all(report["runs"][0]["checks"].values())
+    assert json.loads(report_path.read_text()) == report
+
+
+def test_live_evaluation_cli_reports_a_failed_run_without_leaking_token(
+    ai_service_url: str,
+) -> None:
+    wrong_token = "must-not-appear-in-the-report"
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = wrong_token
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            ai_service_url,
+            "--runs",
+            "1",
+            "--timeout",
+            "5",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    report = json.loads(completed.stdout)
+    assert report["summary"] == {"passed": 0, "failed": 1}
+    assert report["runs"][0]["status"] == "failed"
+    assert report["runs"][0]["turns"] == [
+        {
+            "sequence": 1,
+            "status": "request_error",
+            "error_code": "HTTPStatusError",
+        }
+    ]
+    assert wrong_token not in completed.stdout
+    assert wrong_token not in completed.stderr
