@@ -83,8 +83,8 @@ export ARENA_QWEN_MODEL='qwen3.8-9b-q4'
 export ARENA_QWEN_JSON_MODE=prompt
 export ARENA_QWEN_TIMEOUT_SECONDS=180
 export ARENA_QWEN_TLS_VERIFY=false
-export ARENA_QWEN_FAST_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}'
-export ARENA_QWEN_REASONED_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":true}}'
+export ARENA_QWEN_FAST_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
+export ARENA_QWEN_REASONED_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
 ```
 
-Адрес доступен только через WireGuard. На этом gateway режим `json_object` не подходит: итог не возвращается в ожидаемом `message.content`, поэтому используется `prompt`. Адаптер принимает чистый JSON или один цельный Markdown-блок `json`; произвольный текст вокруг структуры остаётся ошибкой. Переключение thinking зависит от реализации gateway. Сервис не возвращает сырой ответ модели при таймауте, сетевой ошибке и неверной JSON-структуре. Полная сквозная приёмка судей и тренера остаётся отдельным шагом.
+Адрес доступен только через WireGuard. На этом gateway режим `json_object` не подходит: итог не возвращается в ожидаемом `message.content`, поэтому используется `prompt`. Адаптер принимает чистый JSON или один цельный Markdown-блок `json`; произвольный текст вокруг структуры остаётся ошибкой. Отключённый thinking и нулевая температура дали воспроизводимый структурированный вывод в полном прогоне 23 сентября 2026 года: принятый ход, исход, три судьи, тренер и сопоставление частичной карточки подготовки. Отдельные генерации оппонента всё ещё могут нарушить схему и безопасно отклоняются. Сервис не возвращает сырой ответ модели при таймауте, сетевой ошибке и неверной JSON-структуре.

@@ -129,9 +129,7 @@ def main() -> None:
                         "snapshot": snapshot.model_dump(mode="json"),
                     }
                     if preparation is not None:
-                        finish_body["preparation"] = preparation.model_dump(
-                            mode="json", exclude_none=True, exclude_defaults=True
-                        )
+                        finish_body["preparation"] = preparation.filled_fields()
                     response = client.post(
                         "/v1/finish",
                         json=finish_body,

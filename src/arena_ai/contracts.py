@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 type ModelErrorCode = Literal[
     "invalid_opponent_output",
@@ -180,6 +180,13 @@ class PreparationCard(Contract):
             )
         )
 
+    def filled_fields(self) -> dict[str, object]:
+        return self.model_dump(
+            mode="json",
+            exclude_none=True,
+            exclude_defaults=True,
+        )
+
     def comparison_items(self) -> list[PreparationItem]:
         items: list[PreparationItem] = []
         for kind, text in (
@@ -308,6 +315,14 @@ class TrainerContext(Contract):
     transcript: list[TranscriptEntry]
     outcome: OutcomeResult
     preparation: PreparationCard | None = None
+
+    @field_serializer("preparation", when_used="json")
+    def serialize_filled_preparation(
+        self, preparation: PreparationCard | None
+    ) -> dict[str, object] | None:
+        if preparation is None:
+            return None
+        return preparation.filled_fields()
 
 
 class CoachingPoint(Contract):
