@@ -60,6 +60,8 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "manager-only-marker" not in request.content.decode()
             assert "partial_agreement и deferred" in system
             assert "оставь и agreement=null, и decision=null" in system
+            assert "никогда не заполняй agreement и decision одновременно" in system
+            assert "не используй partial_agreement" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
             return completion({"decision": "accept"})
@@ -86,6 +88,7 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "director-only-marker" not in request.content.decode()
             assert "attack-marker" not in request.content.decode()
             assert "Сопоставь каждый вывод" in system
+            assert "ровно один элемент для каждого заполненного элемента" in system
             assert "Спросить, как восстановить доверие." in request.content.decode()
             assert context["preparation"] == {
                 "planned_questions": ["Спросить, как восстановить доверие."]
