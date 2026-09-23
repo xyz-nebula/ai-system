@@ -33,7 +33,10 @@ def build_qwen_runtime(model_http: httpx.AsyncClient | None = None) -> QwenRunti
     actual_http = (
         model_http
         if model_http is not None
-        else httpx.AsyncClient(timeout=settings.timeout_seconds)
+        else httpx.AsyncClient(
+            timeout=settings.timeout_seconds,
+            verify=settings.tls_verify,
+        )
     )
     chat = QwenChatClient(
         actual_http,

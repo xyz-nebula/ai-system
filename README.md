@@ -66,16 +66,25 @@ export ARENA_QWEN_MODEL='MODEL_ID'
 
 При необходимости задайте `ARENA_QWEN_API_KEY` в локальном окружении. `ARENA_QWEN_JSON_MODE=json_object` добавляет `response_format: {"type": "json_object"}`; значение по умолчанию `prompt` полагается на инструкцию в запросе. Для переключения reasoning на уровне вызова можно задать JSON-объекты `ARENA_QWEN_FAST_EXTRA_BODY` и `ARENA_QWEN_REASONED_EXTRA_BODY` с параметрами, которые поддерживает конкретный сервер. Таймаут модельного вызова задаёт `ARENA_QWEN_TIMEOUT_SECONDS` (по умолчанию 60), а короткий таймаут readiness — `ARENA_QWEN_READINESS_TIMEOUT_SECONDS` (по умолчанию 3). По умолчанию адрес `/models` выводится из `ARENA_QWEN_CHAT_URL`; нестандартный адрес можно явно задать через `ARENA_QWEN_MODELS_URL`. `/v1/info` сообщает текущий режим и идентификатор модели.
 
-Проверенный 22 сентября 2026 года Model/Infra gateway предоставляет модель `qwen3.8-9b-q4` через OpenAI-compatible Chat Completions. При доступе через локальный SSH-туннель использовалась конфигурация:
+Проверка TLS-сертификата включена по умолчанию. Для временного хакатонного endpoint с самоподписанным или выписанным только на `localhost` сертификатом её можно отключить исключительно для соединения AI-сервиса с Qwen:
+
+```bash
+export ARENA_QWEN_TLS_VERIFY=false
+```
+
+Не используйте эту настройку для публичного endpoint или постоянного окружения: она отключает проверку подлинности модельного gateway. Предпочтительное постоянное решение — сертификат на внутреннее DNS-имя или IP-адрес gateway.
+
+Проверенный 23 сентября 2026 года Model/Infra gateway предоставляет модель `qwen3.8-9b-q4` через OpenAI-compatible Chat Completions на HTTPS-порту 443 внутри WireGuard. Для успешной readiness-проверки и принятого живого хода использовалась конфигурация:
 
 ```bash
 export ARENA_MODEL_MODE=qwen
-export ARENA_QWEN_CHAT_URL='http://127.0.0.1:18080/v1/chat/completions'
+export ARENA_QWEN_CHAT_URL='https://172.16.34.6/v1/chat/completions'
 export ARENA_QWEN_MODEL='qwen3.8-9b-q4'
 export ARENA_QWEN_JSON_MODE=prompt
 export ARENA_QWEN_TIMEOUT_SECONDS=180
+export ARENA_QWEN_TLS_VERIFY=false
 export ARENA_QWEN_FAST_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}'
 export ARENA_QWEN_REASONED_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":true}}'
 ```
 
-Способ создания туннеля и SSH-данные остаются в локальной конфигурации Model/Infra и в репозитории не хранятся. На этом gateway режим `json_object` не подходит: итог не возвращается в ожидаемом `message.content`, поэтому используется `prompt`. Адаптер принимает чистый JSON или один цельный Markdown-блок `json`; произвольный текст вокруг структуры остаётся ошибкой. Переключение thinking зависит от реализации gateway. Сервис не возвращает сырой ответ модели при таймауте, сетевой ошибке и неверной JSON-структуре. Полная сквозная приёмка судей и тренера остаётся отдельным шагом.
+Адрес доступен только через WireGuard. На этом gateway режим `json_object` не подходит: итог не возвращается в ожидаемом `message.content`, поэтому используется `prompt`. Адаптер принимает чистый JSON или один цельный Markdown-блок `json`; произвольный текст вокруг структуры остаётся ошибкой. Переключение thinking зависит от реализации gateway. Сервис не возвращает сырой ответ модели при таймауте, сетевой ошибке и неверной JSON-структуре. Полная сквозная приёмка судей и тренера остаётся отдельным шагом.

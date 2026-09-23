@@ -1,9 +1,44 @@
-from collections.abc import Callable, Coroutine
+import ssl
+from collections.abc import Callable, Coroutine, Generator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from threading import Thread
 
 import httpx
 import pytest
 
 from arena_ai.app import create_app, create_configured_app
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+class UntrustedModelsHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        body = b'{"data":[{"id":"qwen-test"}]}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+@pytest.fixture
+def untrusted_models_url() -> Generator[str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), UntrustedModelsHandler)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(FIXTURES / "untrusted-cert.pem", FIXTURES / "untrusted-key.pem")
+    server.socket = tls.wrap_socket(server.socket, server_side=True)
+    thread = Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        yield f"https://127.0.0.1:{server.server_port}/v1/models"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
 
 def configure_qwen(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -72,6 +107,38 @@ async def test_qwen_readiness_finds_configured_model(
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "mode": "qwen", "model": "qwen-test"}
+
+
+@pytest.mark.anyio
+async def test_qwen_readiness_can_disable_tls_verification(
+    monkeypatch: pytest.MonkeyPatch,
+    untrusted_models_url: str,
+) -> None:
+    configure_qwen(monkeypatch)
+    monkeypatch.setenv("ARENA_QWEN_MODELS_URL", untrusted_models_url)
+    monkeypatch.setenv("ARENA_QWEN_TLS_VERIFY", "false")
+    app = create_configured_app()
+
+    async with app.router.lifespan_context(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "mode": "qwen", "model": "qwen-test"}
+
+
+def test_qwen_tls_verification_rejects_unknown_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_qwen(monkeypatch)
+    monkeypatch.setenv("ARENA_QWEN_TLS_VERIFY", "sometimes")
+
+    with pytest.raises(
+        ValueError,
+        match="ARENA_QWEN_TLS_VERIFY must be true or false",
+    ):
+        create_configured_app()
 
 
 @pytest.mark.anyio

@@ -66,6 +66,13 @@ def positive_float_from_env(name: str, default: str) -> float:
     return value
 
 
+def boolean_from_env(name: str, default: str) -> bool:
+    value = os.environ.get(name, default)
+    if value not in ("true", "false"):
+        raise ValueError(f"{name} must be true or false")
+    return value == "true"
+
+
 @dataclass(frozen=True)
 class QwenSettings:
     chat_url: str
@@ -75,6 +82,7 @@ class QwenSettings:
     json_mode: JsonMode
     timeout_seconds: float
     readiness_timeout_seconds: float
+    tls_verify: bool
     fast_extra_body: dict[str, object]
     reasoned_extra_body: dict[str, object]
 
@@ -98,6 +106,7 @@ class QwenSettings:
             readiness_timeout_seconds=positive_float_from_env(
                 "ARENA_QWEN_READINESS_TIMEOUT_SECONDS", "3"
             ),
+            tls_verify=boolean_from_env("ARENA_QWEN_TLS_VERIFY", "true"),
             fast_extra_body=extra_body_from_env("ARENA_QWEN_FAST_EXTRA_BODY"),
             reasoned_extra_body=extra_body_from_env("ARENA_QWEN_REASONED_EXTRA_BODY"),
         )
