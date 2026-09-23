@@ -65,6 +65,18 @@ class FailingTrainer:
         raise TimeoutError("trainer unavailable")
 
 
+class RecoveringTrainer(RecordingTrainer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.attempts = 0
+
+    async def feedback(self, context: TrainerContext) -> object:
+        self.attempts += 1
+        if self.attempts == 1:
+            return {"unexpected": True}
+        return await super().feedback(context)
+
+
 class InvalidTrainer(RecordingTrainer):
     async def feedback(self, context: TrainerContext) -> object:
         raw = await super().feedback(context)
@@ -180,6 +192,22 @@ async def test_trainer_has_separate_public_call_and_grounded_feedback() -> None:
     assert feedback["next_try"]
     assert "plan_vs_reality" not in feedback
     assert len(result["judge_verdicts"]) == 3
+
+
+@pytest.mark.anyio
+async def test_trainer_recovers_from_one_invalid_result() -> None:
+    trainer = RecoveringTrainer()
+    app = create_app(trainer=trainer, model_attempts=2)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/finish", json={"case": CASE, "snapshot": SNAPSHOT}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["trainer_feedback"]["status"] == "ready"
+    assert trainer.attempts == 2
 
 
 @pytest.mark.anyio

@@ -88,6 +88,19 @@ class BlockedAwareJudge(RecordingJudge):
         return await super().verdict(context)
 
 
+class RecoveringJudge(RecordingJudge):
+    def __init__(self) -> None:
+        super().__init__()
+        self.attempts: dict[str, int] = {}
+
+    async def verdict(self, context: JudgeContext) -> object:
+        attempt = self.attempts.get(context.college, 0) + 1
+        self.attempts[context.college] = attempt
+        if attempt == 1:
+            return {"unexpected": True}
+        return await super().verdict(context)
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -116,6 +129,20 @@ async def test_three_judges_receive_isolated_rubrics_and_public_case_view() -> N
     assert len(judge.contexts) == 3
     assert len({context.rubric for context in judge.contexts}) == 3
     assert len({repr(context.transcript) for context in judge.contexts}) == 1
+
+
+@pytest.mark.anyio
+async def test_each_judge_recovers_independently_from_one_invalid_result() -> None:
+    judge = RecoveringJudge()
+    app = create_app(judge=judge, model_attempts=2)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/finish", json=FINISH_PAYLOAD)
+
+    assert response.status_code == 200
+    assert all(slot["status"] == "ready" for slot in response.json()["judge_verdicts"])
+    assert judge.attempts == {"hiring": 2, "negotiation": 2, "ownership": 2}
 
 
 @pytest.mark.anyio

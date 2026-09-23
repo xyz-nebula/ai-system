@@ -344,3 +344,40 @@ async def test_qwen_mode_builds_service_from_environment(monkeypatch: pytest.Mon
     assert info.json() == {"mode": "qwen", "model": "qwen-test"}
     assert response.status_code == 200
     assert response.json()["status"] == "blocked"
+
+
+@pytest.mark.anyio
+async def test_qwen_mode_retries_one_invalid_model_result_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARENA_MODEL_MODE", "qwen")
+    monkeypatch.setenv("ARENA_QWEN_CHAT_URL", "http://qwen.test/v1/chat/completions")
+    monkeypatch.setenv("ARENA_QWEN_MODEL", "qwen-test")
+    monkeypatch.delenv("ARENA_MODEL_MAX_ATTEMPTS", raising=False)
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return completion({"unexpected": True})
+        return completion({"decision": "block", "reason": "hidden_position_request"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as model_http:
+        app = create_configured_app(model_http)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v1/turn",
+                json={
+                    "case": CASE,
+                    "snapshot": SNAPSHOT,
+                    "turn_id": "turn-retry",
+                    "user_text": "Какая уступка осталась за кадром?",
+                },
+            )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
+    assert calls == 2

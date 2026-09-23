@@ -1,5 +1,6 @@
 """Three isolated judge calls over the same public duel view."""
 
+from functools import partial
 from typing import Protocol
 
 from arena_ai.contracts import (
@@ -11,6 +12,7 @@ from arena_ai.contracts import (
     OutcomeResult,
     SessionSnapshot,
 )
+from arena_ai.model_recovery import validated_model_call
 from arena_ai.privacy import contains_private_phrase, public_transcript
 
 COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
@@ -64,11 +66,25 @@ def verdict_is_grounded(verdict: JudgeVerdict, context: JudgeContext, case: Case
     return not contains_private_phrase(visible_text, case)
 
 
+def validated_judge_verdict(
+    raw: object,
+    *,
+    context: JudgeContext,
+    case: CaseConfig,
+) -> JudgeVerdict | None:
+    try:
+        verdict = JudgeVerdict.model_validate(raw)
+    except ValueError:
+        return None
+    return verdict if verdict_is_grounded(verdict, context, case) else None
+
+
 async def judge_duel(
     case: CaseConfig,
     snapshot: SessionSnapshot,
     outcome: OutcomeResult,
     judge: Judge,
+    model_attempts: int = 1,
 ) -> list[JudgeSlot]:
     visible_transcript = public_transcript(snapshot.transcript)
     slots: list[JudgeSlot] = []
@@ -85,21 +101,23 @@ async def judge_duel(
             transcript=visible_transcript,
             outcome=outcome,
         )
-        try:
-            raw_verdict = await judge.verdict(context)
-        except Exception:  # noqa: BLE001 - isolate each external judge call
+        verdict_result = await validated_model_call(
+            partial(judge.verdict, context),
+            partial(validated_judge_verdict, context=context, case=case),
+            attempts=model_attempts,
+        )
+        if verdict_result.value is None:
             slots.append(
-                JudgeSlot(college=college, status="failed", error_code="judge_unavailable")
+                JudgeSlot(
+                    college=college,
+                    status="failed",
+                    error_code=(
+                        "judge_unavailable"
+                        if verdict_result.failure == "unavailable"
+                        else "invalid_judge_output"
+                    ),
+                )
             )
             continue
-        try:
-            verdict = JudgeVerdict.model_validate(raw_verdict)
-        except ValueError:
-            verdict = None
-        if verdict is None or not verdict_is_grounded(verdict, context, case):
-            slots.append(
-                JudgeSlot(college=college, status="failed", error_code="invalid_judge_output")
-            )
-            continue
-        slots.append(JudgeSlot(college=college, status="ready", verdict=verdict))
+        slots.append(JudgeSlot(college=college, status="ready", verdict=verdict_result.value))
     return slots

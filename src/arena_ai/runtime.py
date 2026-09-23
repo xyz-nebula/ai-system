@@ -26,6 +26,7 @@ class QwenRuntime:
     readiness: QwenReadinessProbe
     owned_http: httpx.AsyncClient | None
     model_id: str
+    model_attempts: int
 
 
 def build_qwen_runtime(model_http: httpx.AsyncClient | None = None) -> QwenRuntime:
@@ -62,4 +63,5 @@ def build_qwen_runtime(model_http: httpx.AsyncClient | None = None) -> QwenRunti
         ),
         owned_http=actual_http if model_http is None else None,
         model_id=settings.model,
+        model_attempts=settings.model_attempts,
     )

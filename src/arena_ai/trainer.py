@@ -12,6 +12,7 @@ from arena_ai.contracts import (
     TrainerFeedback,
     TrainerSlot,
 )
+from arena_ai.model_recovery import validated_model_call
 from arena_ai.privacy import contains_private_phrase, public_transcript
 
 
@@ -163,6 +164,7 @@ async def train_duel(
     outcome: OutcomeResult,
     trainer: Trainer,
     preparation: PreparationCard | None = None,
+    model_attempts: int = 1,
 ) -> TrainerSlot:
     if preparation is not None and not preparation.has_content():
         preparation = None
@@ -177,14 +179,25 @@ async def train_duel(
         outcome=outcome,
         preparation=preparation,
     )
-    try:
-        raw_feedback = await trainer.feedback(context)
-    except Exception:  # noqa: BLE001 - isolate the trainer model call
-        return TrainerSlot(status="failed", error_code="trainer_unavailable")
-    try:
-        feedback = TrainerFeedback.model_validate(raw_feedback)
-    except ValueError:
-        feedback = None
-    if feedback is None or not feedback_is_grounded(feedback, context, case):
-        return TrainerSlot(status="failed", error_code="invalid_trainer_output")
-    return TrainerSlot(status="ready", feedback=feedback)
+    def validated_feedback(raw: object) -> TrainerFeedback | None:
+        try:
+            feedback = TrainerFeedback.model_validate(raw)
+        except ValueError:
+            return None
+        return feedback if feedback_is_grounded(feedback, context, case) else None
+
+    feedback_result = await validated_model_call(
+        lambda: trainer.feedback(context),
+        validated_feedback,
+        attempts=model_attempts,
+    )
+    if feedback_result.value is None:
+        return TrainerSlot(
+            status="failed",
+            error_code=(
+                "trainer_unavailable"
+                if feedback_result.failure == "unavailable"
+                else "invalid_trainer_output"
+            ),
+        )
+    return TrainerSlot(status="ready", feedback=feedback_result.value)

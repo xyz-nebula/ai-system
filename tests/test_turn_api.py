@@ -69,6 +69,30 @@ class FailingOpponent:
         raise RuntimeError("raw-secret-from-model")
 
 
+class RecoveringOpponent:
+    def __init__(self) -> None:
+        self.results = iter(
+            [
+                {"reply": "Неверная структура"},
+                {"text": "Давайте обсудим, как восстановить доверие."},
+            ]
+        )
+
+    async def respond(self, context: object) -> object:
+        return next(self.results)
+
+
+class RecoveringUnavailableOpponent:
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def respond(self, context: object) -> object:
+        self.attempts += 1
+        if self.attempts == 1:
+            raise TimeoutError("temporary-provider-detail")
+        return {"text": "Давайте обсудим, как восстановить доверие."}
+
+
 def next_day_request() -> dict[str, object]:
     return {
         "case": {
@@ -146,6 +170,58 @@ async def test_manager_can_take_first_text_turn() -> None:
                 },
             ],
         },
+    }
+
+
+@pytest.mark.anyio
+async def test_turn_recovers_from_one_invalid_opponent_result_before_committing() -> None:
+    app = create_app(opponent=RecoveringOpponent(), model_attempts=2)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/turn", json=next_day_request())
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "accepted"
+    assert result["snapshot"]["state"]["turn_count"] == 1
+    assert len(result["snapshot"]["transcript"]) == 2
+
+
+@pytest.mark.anyio
+async def test_turn_recovers_from_one_unavailable_opponent_call() -> None:
+    opponent = RecoveringUnavailableOpponent()
+    app = create_app(opponent=opponent, model_attempts=2)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/turn", json=next_day_request())
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    assert opponent.attempts == 2
+    assert "temporary-provider-detail" not in response.text
+
+
+@pytest.mark.anyio
+async def test_turn_keeps_safe_error_and_snapshot_after_attempts_are_exhausted() -> None:
+    app = create_app(
+        opponent=RawOpponent({"reply": "Неверная структура"}),
+        model_attempts=2,
+    )
+    request = next_day_request()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/turn", json=request)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "model_error"
+    assert response.json()["error_code"] == "invalid_opponent_output"
+    assert response.json()["snapshot"] == {
+        "session_id": "demo-validation",
+        "state": {"turn_count": 0, "stage": "negotiating"},
+        "transcript": [],
     }
 
 

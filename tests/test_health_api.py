@@ -48,6 +48,7 @@ def configure_qwen(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ARENA_QWEN_MODELS_URL", raising=False)
     monkeypatch.delenv("ARENA_QWEN_API_KEY", raising=False)
     monkeypatch.delenv("ARENA_QWEN_READINESS_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("ARENA_MODEL_MAX_ATTEMPTS", raising=False)
 
 
 async def request_configured_health(
@@ -137,6 +138,21 @@ def test_qwen_tls_verification_rejects_unknown_setting(
     with pytest.raises(
         ValueError,
         match="ARENA_QWEN_TLS_VERIFY must be true or false",
+    ):
+        create_configured_app()
+
+
+@pytest.mark.parametrize("value", ["0", "4", "many"])
+def test_qwen_model_attempts_reject_invalid_setting(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    configure_qwen(monkeypatch)
+    monkeypatch.setenv("ARENA_MODEL_MAX_ATTEMPTS", value)
+
+    with pytest.raises(
+        ValueError,
+        match="ARENA_MODEL_MAX_ATTEMPTS must be an integer between 1 and 3",
     ):
         create_configured_app()
 

@@ -73,6 +73,16 @@ def boolean_from_env(name: str, default: str) -> bool:
     return value == "true"
 
 
+def bounded_int_from_env(name: str, default: str, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer between {minimum} and {maximum}") from error
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be an integer between {minimum} and {maximum}")
+    return value
+
+
 @dataclass(frozen=True)
 class QwenSettings:
     chat_url: str
@@ -85,6 +95,7 @@ class QwenSettings:
     tls_verify: bool
     fast_extra_body: dict[str, object]
     reasoned_extra_body: dict[str, object]
+    model_attempts: int
 
     @classmethod
     def from_env(cls) -> "QwenSettings":
@@ -109,6 +120,7 @@ class QwenSettings:
             tls_verify=boolean_from_env("ARENA_QWEN_TLS_VERIFY", "true"),
             fast_extra_body=extra_body_from_env("ARENA_QWEN_FAST_EXTRA_BODY"),
             reasoned_extra_body=extra_body_from_env("ARENA_QWEN_REASONED_EXTRA_BODY"),
+            model_attempts=bounded_int_from_env("ARENA_MODEL_MAX_ATTEMPTS", "2", 1, 3),
         )
 
 

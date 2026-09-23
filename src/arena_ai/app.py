@@ -37,6 +37,7 @@ from arena_ai.contracts import (
     ValidationDecision,
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
+from arena_ai.model_recovery import validated_model_call
 from arena_ai.outcome import determine_outcome
 from arena_ai.privacy import contains_private_phrase, public_transcript
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
@@ -224,7 +225,11 @@ def create_app(
     model_id: str | None = None,
     service_token: str | None = None,
     readiness_probe: ReadinessProbe | None = None,
+    model_attempts: int = 1,
 ) -> FastAPI:
+    if not 1 <= model_attempts <= 3:
+        raise ValueError("model_attempts must be between 1 and 3")
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
@@ -307,14 +312,27 @@ def create_app(
                 transcript=public_transcript(request.snapshot.transcript),
                 user_text=request.user_text,
             )
-            try:
-                raw_guard_decision = await guard.assess(guard_context)
-            except Exception:  # noqa: BLE001 - isolate the external guard call
-                return model_failure_response(request, "guard_unavailable")
-            try:
-                guard_decision = GuardDecision.model_validate(raw_guard_decision)
-            except ValueError:
-                return model_failure_response(request, "invalid_guard_output")
+            def validated_guard(raw: object) -> GuardDecision | None:
+                try:
+                    return GuardDecision.model_validate(raw)
+                except ValueError:
+                    return None
+
+            guard_result = await validated_model_call(
+                lambda: guard.assess(guard_context),
+                validated_guard,
+                attempts=model_attempts,
+            )
+            if guard_result.value is None:
+                return model_failure_response(
+                    request,
+                    (
+                        "guard_unavailable"
+                        if guard_result.failure == "unavailable"
+                        else "invalid_guard_output"
+                    ),
+                )
+            guard_decision = guard_result.value
             if guard_decision.decision == "uncertain":
                 return model_failure_response(request, "guard_uncertain")
             if guard_decision.decision == "block":
@@ -330,18 +348,37 @@ def create_app(
             transcript=public_transcript(request.snapshot.transcript),
             user_text=request.user_text,
         )
-        try:
-            raw_proposal = await active_opponent.respond(context)
-        except Exception:  # noqa: BLE001 - isolate any failure of the external model adapter
-            return model_failure_response(request, "opponent_unavailable")
-        try:
-            proposal = OpponentProposal.model_validate(raw_proposal)
-        except ValueError:
-            proposal = None
-        if proposal is None or not valid_proposal(
-            proposal, request.case, request.user_text, request.snapshot.transcript
-        ):
-            return model_failure_response(request, "invalid_opponent_output")
+        def validated_proposal(raw: object) -> OpponentProposal | None:
+            try:
+                proposal = OpponentProposal.model_validate(raw)
+            except ValueError:
+                return None
+            return (
+                proposal
+                if valid_proposal(
+                    proposal,
+                    request.case,
+                    request.user_text,
+                    request.snapshot.transcript,
+                )
+                else None
+            )
+
+        proposal_result = await validated_model_call(
+            lambda: active_opponent.respond(context),
+            validated_proposal,
+            attempts=model_attempts,
+        )
+        if proposal_result.value is None:
+            return model_failure_response(
+                request,
+                (
+                    "opponent_unavailable"
+                    if proposal_result.failure == "unavailable"
+                    else "invalid_opponent_output"
+                ),
+            )
+        proposal = proposal_result.value
         if validator is not None:
             validation_context = ValidationContext(
                 case=request.case,
@@ -350,14 +387,27 @@ def create_app(
                 user_text=request.user_text,
                 proposal=proposal,
             )
-            try:
-                raw_validation = await validator.assess(validation_context)
-            except Exception:  # noqa: BLE001 - isolate the external validator call
-                return model_failure_response(request, "validator_unavailable")
-            try:
-                validation = ValidationDecision.model_validate(raw_validation)
-            except ValueError:
-                return model_failure_response(request, "invalid_validator_output")
+            def validated_validation(raw: object) -> ValidationDecision | None:
+                try:
+                    return ValidationDecision.model_validate(raw)
+                except ValueError:
+                    return None
+
+            validation_result = await validated_model_call(
+                lambda: validator.assess(validation_context),
+                validated_validation,
+                attempts=model_attempts,
+            )
+            if validation_result.value is None:
+                return model_failure_response(
+                    request,
+                    (
+                        "validator_unavailable"
+                        if validation_result.failure == "unavailable"
+                        else "invalid_validator_output"
+                    ),
+                )
+            validation = validation_result.value
             if validation.decision == "uncertain":
                 return model_failure_response(request, "validator_uncertain")
             if validation.decision == "reject":
@@ -412,13 +462,20 @@ def create_app(
         return FinishResponse(
             session_id=request.snapshot.session_id,
             outcome=outcome,
-            judge_verdicts=await judge_duel(request.case, request.snapshot, outcome, active_judge),
+            judge_verdicts=await judge_duel(
+                request.case,
+                request.snapshot,
+                outcome,
+                active_judge,
+                model_attempts,
+            ),
             trainer_feedback=await train_duel(
                 request.case,
                 request.snapshot,
                 outcome,
                 active_trainer,
                 request.preparation,
+                model_attempts,
             ),
         )
 
@@ -447,6 +504,7 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
         model_id=runtime.model_id,
         service_token=service_token,
         readiness_probe=runtime.readiness,
+        model_attempts=runtime.model_attempts,
     )
 
 
