@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from arena_ai.contracts import (
+    AgreementResolution,
     CaseConfig,
     DeferredDecision,
     FinishRequest,
@@ -104,46 +105,49 @@ def valid_proposal(
         text,
     ):
         return False
+    resolution = proposal.resolution
     visible_text = " ".join(
         [
             proposal.text,
-            *(proposal.agreement.employee_commitments if proposal.agreement else []),
-            *(proposal.agreement.director_commitments if proposal.agreement else []),
+            *(resolution.employee_commitments if isinstance(resolution, AgreementResolution) else []),
+            *(resolution.director_commitments if isinstance(resolution, AgreementResolution) else []),
             *(
-                proposal.decision.commitments
-                if isinstance(proposal.decision, PartialDecision)
+                resolution.commitments
+                if isinstance(resolution, PartialDecision)
                 else []
             ),
             *(
-                proposal.decision.open_points
-                if isinstance(proposal.decision, PartialDecision)
+                resolution.open_points
+                if isinstance(resolution, PartialDecision)
                 else []
             ),
             *(
-                [proposal.decision.reason, proposal.decision.next_step]
-                if isinstance(proposal.decision, DeferredDecision)
+                [resolution.reason, resolution.next_step]
+                if isinstance(resolution, DeferredDecision)
                 else []
             ),
         ]
     )
     if contains_private_phrase(visible_text, case):
         return False
-    if isinstance(proposal.decision, PartialDecision):
+    if isinstance(resolution, PartialDecision):
         return (
             "соглас" in text
             and any(word in text for word in ("открыт", "остал", "пока"))
             and not re.search(r"\bне\s+(?:буду|готов|согласен)\b", player_text)
             and any(word in player_text for word in ("готов", "соглас", "предлага"))
         )
-    if isinstance(proposal.decision, DeferredDecision):
+    if isinstance(resolution, DeferredDecision):
         return (
             any(word in text for word in ("верн", "отлож", "перенес"))
             and not re.search(r"\bне\s+(?:хочу|готов).{0,30}(?:отклад|перенос)", player_text)
             and any(word in player_text for word in ("завтра", "верн", "отлож", "позже", "перенес"))
         )
-    if proposal.agreement is None:
+    if resolution is None:
         return True
-    terms = proposal.agreement
+    if not isinstance(resolution, AgreementResolution):
+        return False
+    terms = resolution
     rules = case.agreement_rules
     prior_offer = any(
         entry.speaker == "opponent"
@@ -412,19 +416,28 @@ def create_app(
                 return model_failure_response(request, "validator_uncertain")
             if validation.decision == "reject":
                 return model_failure_response(request, "invalid_opponent_output")
+        resolution = proposal.resolution
+        agreement = (
+            resolution.as_deal_terms()
+            if isinstance(resolution, AgreementResolution)
+            else None
+        )
+        decision = (
+            resolution if isinstance(resolution, (PartialDecision, DeferredDecision)) else None
+        )
         snapshot = SessionSnapshot(
             session_id=request.snapshot.session_id,
             state=SessionState(
                 turn_count=request.snapshot.state.turn_count + 1,
                 stage=(
                     "agreed"
-                    if proposal.agreement is not None
-                    else proposal.decision.kind
-                    if proposal.decision is not None
+                    if agreement is not None
+                    else decision.kind
+                    if decision is not None
                     else "negotiating"
                 ),
-                agreement=proposal.agreement,
-                decision=proposal.decision,
+                agreement=agreement,
+                decision=decision,
             ),
             transcript=[
                 *request.snapshot.transcript,

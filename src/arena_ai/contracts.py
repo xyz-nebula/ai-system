@@ -80,6 +80,13 @@ class DealTerms(Contract):
     director_commitments: list[str] = Field(min_length=1)
 
 
+class AgreementResolution(DealTerms):
+    kind: Literal["agreement"]
+
+    def as_deal_terms(self) -> DealTerms:
+        return DealTerms.model_validate(self.model_dump(exclude={"kind"}))
+
+
 class PartialDecision(Contract):
     kind: Literal["partial_agreement"]
     commitments: list[str] = Field(min_length=1)
@@ -93,6 +100,10 @@ class DeferredDecision(Contract):
 
 
 type InterimDecision = PartialDecision | DeferredDecision
+type OpponentResolution = Annotated[
+    AgreementResolution | PartialDecision | DeferredDecision,
+    Field(discriminator="kind"),
+]
 
 
 class SessionState(Contract):
@@ -150,14 +161,7 @@ class TurnResponse(Contract):
 
 class OpponentProposal(Contract):
     text: str = Field(min_length=1)
-    agreement: DealTerms | None = None
-    decision: InterimDecision | None = None
-
-    @model_validator(mode="after")
-    def one_resolution_only(self) -> Self:
-        if self.agreement is not None and self.decision is not None:
-            raise ValueError("opponent proposed two resolutions")
-        return self
+    resolution: OpponentResolution | None = None
 
 
 class PreparationCard(Contract):

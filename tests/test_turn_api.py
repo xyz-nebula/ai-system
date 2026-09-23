@@ -32,7 +32,8 @@ class AgreementOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Согласен: одна контрольная неделя, KPI 120%, затем повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -46,7 +47,8 @@ class ContradictoryAgreementOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Не согласен на одну неделю и KPI 120%; повышение пока не обещаю.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -423,7 +425,8 @@ async def test_contradictory_agreement_is_rejected_before_acceptance() -> None:
     [
         {
             "text": "Согласен на 0 контрольных недель и KPI 120%; повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 0,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -473,7 +476,8 @@ async def test_private_context_in_structured_terms_is_not_returned() -> None:
         opponent=RawOpponent(
             {
                 "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-                "agreement": {
+                "resolution": {
+                    "kind": "agreement",
                     "control_weeks": 1,
                     "kpi_percent": 120,
                     "automatic_raise": True,
@@ -513,7 +517,8 @@ async def test_agreement_without_both_sides_commitments_is_rejected() -> None:
         opponent=RawOpponent(
             {
                 "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-                "agreement": {
+                "resolution": {
+                    "kind": "agreement",
                     "control_weeks": 1,
                     "kpi_percent": 120,
                     "automatic_raise": True,
@@ -580,7 +585,8 @@ async def test_discussion_without_promised_raise_cannot_set_agreement() -> None:
         opponent=RawOpponent(
             {
                 "text": "Согласен обсудить одну неделю и KPI 120%, но повышение пока не обещаю.",
-                "agreement": {
+                "resolution": {
+                    "kind": "agreement",
                     "control_weeks": 1,
                     "kpi_percent": 120,
                     "automatic_raise": True,

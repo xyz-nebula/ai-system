@@ -19,7 +19,8 @@ class DealOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -33,7 +34,7 @@ class PartialOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Согласуем компенсацию пропуска; KPI и дату повышения пока оставим открытыми.",
-            "decision": {
+            "resolution": {
                 "kind": "partial_agreement",
                 "commitments": ["Компенсировать пропущенный день"],
                 "open_points": ["KPI и дата повышения"],
@@ -45,7 +46,7 @@ class DeferringOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Вернёмся к решению завтра после уточнения KPI.",
-            "decision": {
+            "resolution": {
                 "kind": "deferred",
                 "reason": "Нужно уточнить измеримый KPI",
                 "next_step": "Завтра согласовать KPI и дату повышения",
@@ -59,7 +60,8 @@ class OfferThenDealOpponent:
             return {"text": "Предлагаю одну неделю контроля и KPI 120%."}
         return {
             "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,

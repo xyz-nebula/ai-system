@@ -71,7 +71,8 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                         "Согласен: 2 недели контроля, KPI 120% и автоматическое повышение "
                         "после выполнения. Договорились."
                     ),
-                    "agreement": {
+                    "resolution": {
+                        "kind": "agreement",
                         "control_weeks": 2,
                         "kpi_percent": 120,
                         "automatic_raise": True,
@@ -80,13 +81,11 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                             "Автоматически оформить повышение после выполнения KPI."
                         ],
                     },
-                    "decision": None,
                 }
             else:
                 completion = {
                     "text": "Давайте согласуем измеримые условия.",
-                    "agreement": None,
-                    "decision": None,
+                    "resolution": None,
                 }
         elif system.startswith("[ARENA_VALIDATOR]"):
             completion = {"decision": "accept"}

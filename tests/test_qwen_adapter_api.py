@@ -58,10 +58,13 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             return completion({"decision": "allow", "reason": None})
         if role == "[ARENA_OPPONENT]":
             assert "manager-only-marker" not in request.content.decode()
-            assert "partial_agreement и deferred" in system
-            assert "оставь и agreement=null, и decision=null" in system
-            assert "никогда не заполняй agreement и decision одновременно" in system
-            assert "не используй partial_agreement" in system
+            opponent_schema = json.loads(system.split("Верни только JSON по схеме: ", 1)[1])
+            assert set(opponent_schema["properties"]) == {"text", "resolution"}
+            tagged_union = opponent_schema["$defs"]["OpponentResolution"]
+            assert tagged_union["discriminator"]["propertyName"] == "kind"
+            assert "единственный возможный исход" in system
+            assert "resolution=null" in system
+            assert "kind=agreement" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
             return completion({"decision": "accept"})
