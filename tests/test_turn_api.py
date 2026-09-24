@@ -421,8 +421,52 @@ async def test_contradictory_agreement_is_rejected_before_acceptance() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "opponent_text",
+    [
+        "Принято: одна контрольная неделя, KPI 120%, повышение автоматически.",
+        "Условия согласованы: одна контрольная неделя, KPI 120%, повышение автоматически.",
+    ],
+)
+async def test_explicit_agreement_synonyms_are_accepted(opponent_text: str) -> None:
+    app = create_app(
+        opponent=RawOpponent(
+            {
+                "text": opponent_text,
+                "resolution": {
+                    "kind": "agreement",
+                    "control_weeks": 1,
+                    "kpi_percent": 120,
+                    "automatic_raise": True,
+                    "employee_commitments": ["Выполнить KPI 120% за неделю"],
+                    "director_commitments": ["Автоматически повысить зарплату"],
+                },
+            }
+        )
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/v1/turn", json=next_day_request())
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     "raw_result",
     [
+        {
+            "text": "Согласен обсудить детали.",
+            "resolution": {"kind": "unknown"},
+        },
+        {
+            "text": "Согласен на частичное решение.",
+            "resolution": {
+                "kind": "partial_agreement",
+                "commitments": ["Провести контрольную неделю"],
+            },
+        },
         {
             "text": "Согласен на 0 контрольных недель и KPI 120%; повышение автоматически.",
             "resolution": {
@@ -432,6 +476,20 @@ async def test_contradictory_agreement_is_rejected_before_acceptance() -> None:
                 "automatic_raise": True,
                 "employee_commitments": [],
                 "director_commitments": [],
+            },
+        },
+        {
+            "text": (
+                "Условия не согласованы: одна контрольная неделя, KPI 120%, "
+                "повышение автоматически."
+            ),
+            "resolution": {
+                "kind": "agreement",
+                "control_weeks": 1,
+                "kpi_percent": 120,
+                "automatic_raise": True,
+                "employee_commitments": ["Выполнить KPI 120% за неделю"],
+                "director_commitments": ["Автоматически повысить зарплату"],
             },
         },
         {"reply": "Неверная структура"},

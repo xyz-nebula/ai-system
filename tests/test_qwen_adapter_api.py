@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from arena_ai.app import create_app, create_configured_app
+from arena_ai.contracts import SessionState
 from arena_ai.qwen import (
     QwenChatClient,
     QwenGuard,
@@ -65,6 +66,11 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "единственный возможный исход" in system
             assert "resolution=null" in system
             assert "kind=agreement" in system
+            assert "не копируй закрытые вводные ни в одно поле" in system
+            assert "В text явно назови выбранный исход" in system
+            assert "готовность компенсировать последствия" in system
+            assert "Любые предлагаемые тобой условия" in system
+            assert "повышение должно быть автоматическим" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
             return completion({"decision": "accept"})
@@ -256,6 +262,39 @@ async def test_turn_accepts_qwen_json_wrapped_in_one_markdown_fence() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "accepted"
+
+
+@pytest.mark.anyio
+async def test_qwen_client_repairs_one_missing_final_object_brace() -> None:
+    expected = {
+        "text": "Условия согласованы.",
+        "resolution": {
+            "kind": "agreement",
+            "control_weeks": 2,
+            "kpi_percent": 120,
+            "automatic_raise": True,
+            "employee_commitments": ["Выполнить KPI"],
+            "director_commitments": ["Автоматически повысить зарплату"],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = json.dumps(expected, ensure_ascii=False)[:-1]
+        return text_completion(content)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as model_http:
+        chat = QwenChatClient(
+            model_http,
+            chat_url="http://qwen.test/v1/chat/completions",
+            model="qwen-test",
+        )
+        result = await chat.complete_json(
+            system="Return JSON",
+            context=SessionState(turn_count=0),
+            reasoned=False,
+        )
+
+    assert result == expected
 
 
 @pytest.mark.anyio

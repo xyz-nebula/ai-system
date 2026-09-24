@@ -203,6 +203,35 @@ async def test_finish_reports_partial_agreement_and_open_points() -> None:
 
 
 @pytest.mark.anyio
+async def test_general_readiness_cannot_become_partial_agreement() -> None:
+    app = create_app(opponent=PartialOpponent())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        turn = await client.post(
+            "/v1/turn",
+            json={
+                "case": CASE,
+                "snapshot": {
+                    "session_id": "demo-general-readiness",
+                    "state": {"turn_count": 0},
+                    "transcript": [],
+                },
+                "turn_id": "turn-1",
+                "user_text": (
+                    "Понимаю ваши сомнения. Я готов компенсировать последствия пропуска "
+                    "и подтвердить ответственность измеримым результатом."
+                ),
+            },
+        )
+
+    assert turn.status_code == 200
+    assert turn.json()["status"] == "model_error"
+    assert turn.json()["error_code"] == "invalid_opponent_output"
+    assert turn.json()["snapshot"]["state"]["turn_count"] == 0
+
+
+@pytest.mark.anyio
 async def test_finish_reports_deferral_and_next_step() -> None:
     case = CASE
     app = create_app(opponent=DeferringOpponent())

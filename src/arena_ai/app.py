@@ -131,11 +131,18 @@ def valid_proposal(
     if contains_private_phrase(visible_text, case):
         return False
     if isinstance(resolution, PartialDecision):
+        explicit_partial_signal = any(word in player_text for word in ("соглас", "предлага")) or (
+            "готов" in player_text
+            and any(
+                word in player_text
+                for word in ("отдельн", "открыт", "остал", "пока", "обсудим")
+            )
+        )
         return (
             "соглас" in text
             and any(word in text for word in ("открыт", "остал", "пока"))
             and not re.search(r"\bне\s+(?:буду|готов|согласен)\b", player_text)
-            and any(word in player_text for word in ("готов", "соглас", "предлага"))
+            and explicit_partial_signal
         )
     if isinstance(resolution, DeferredDecision):
         return (
@@ -165,10 +172,16 @@ def valid_proposal(
         and rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
         and rules.min_kpi_percent <= terms.kpi_percent <= rules.max_kpi_percent
         and (terms.automatic_raise or not rules.require_automatic_raise)
-        and not re.search(r"\bне\s+(?:согласен|принимаю)\b", text)
+        and not re.search(
+            r"\bне\s+(?:согласен|принимаю|принят\w*|согласован\w*)\b",
+            text,
+        )
         and not re.search(r"\bсогласен\s+(?:обсудить|рассмотреть|вернуться)\b", text)
         and not re.search(r"повышен\w*.{0,40}(?:не\s+обеща|не\s+гарантир|не\s+подтвержд)", text)
-        and any(word in text for word in ("согласен", "договорились", "принимаю"))
+        and any(
+            word in text
+            for word in ("согласен", "договорились", "принимаю", "принят", "согласован")
+        )
         and str(terms.kpi_percent) in text
         and "недел" in text
         and "повышен" in text
