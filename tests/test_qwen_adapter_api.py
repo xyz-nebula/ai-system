@@ -60,7 +60,11 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
         if role == "[ARENA_OPPONENT]":
             assert "manager-only-marker" not in request.content.decode()
             opponent_schema = json.loads(system.split("Верни только JSON по схеме: ", 1)[1])
-            assert set(opponent_schema["properties"]) == {"text", "resolution"}
+            assert set(opponent_schema["properties"]) == {
+                "text",
+                "resolution",
+                "position_transition",
+            }
             tagged_union = opponent_schema["$defs"]["OpponentResolution"]
             assert tagged_union["discriminator"]["propertyName"] == "kind"
             assert "единственный возможный исход" in system
@@ -71,6 +75,10 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "готовность компенсировать последствия" in system
             assert "Любые предлагаемые тобой условия" in system
             assert "повышение должно быть автоматическим" in system
+            assert "position_transition добавляй только" in system
+            assert "ровно на следующую ступень" in system
+            assert "дословную цитату текущей реплики" in system
+            assert "Не раскрывай идентификаторы ступеней" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
             return completion({"decision": "accept"})

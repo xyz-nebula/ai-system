@@ -17,7 +17,13 @@ CASE = {
 }
 SNAPSHOT = {
     "session_id": "coached-duel",
-    "state": {"turn_count": 1},
+    "state": {
+        "turn_count": 1,
+        "opponent_progress": {
+            "current_step_id": "private-target-step",
+            "satisfied_requirement_ids": ["private-requirement"],
+        },
+    },
     "transcript": [
         {
             "turn_id": "turn-1",
@@ -44,6 +50,8 @@ class RecordingTrainer:
         assert "manager-private-marker" not in repr(context)
         assert "director-private-marker" not in repr(context)
         assert "judge_verdicts" not in repr(context)
+        assert "private-target-step" not in repr(context)
+        assert "private-requirement" not in repr(context)
         return {
             "summary": "Менеджер обозначил готовность компенсировать пропуск, но условия пока открыты.",
             "strengths": [

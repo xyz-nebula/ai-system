@@ -19,7 +19,13 @@ FINISH_PAYLOAD = {
     },
     "snapshot": {
         "session_id": "judged-duel",
-        "state": {"turn_count": 1},
+        "state": {
+            "turn_count": 1,
+            "opponent_progress": {
+                "current_step_id": "private-target-step",
+                "satisfied_requirement_ids": ["private-requirement"],
+            },
+        },
         "transcript": [
             {
                 "turn_id": "turn-1",
@@ -46,6 +52,8 @@ class RecordingJudge:
         self.contexts.append(context)
         assert "manager-only-marker" not in repr(context)
         assert "director-only-marker" not in repr(context)
+        assert "private-target-step" not in repr(context)
+        assert "private-requirement" not in repr(context)
         return {
             "college": context.college,
             "choice": "player",

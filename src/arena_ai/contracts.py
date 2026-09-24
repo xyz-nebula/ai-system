@@ -60,6 +60,52 @@ class AgreementRules(Contract):
         return self
 
 
+class DealTerms(Contract):
+    control_weeks: int = Field(ge=0)
+    kpi_percent: int = Field(ge=0)
+    automatic_raise: bool
+    employee_commitments: list[str] = Field(min_length=1)
+    director_commitments: list[str] = Field(min_length=1)
+
+
+class ConcessionRequirement(Contract):
+    id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class OpponentPositionStep(Contract):
+    id: str = Field(min_length=1)
+    kind: Literal["declared", "intermediate", "target", "red_line"]
+    terms: DealTerms
+    requires: list[ConcessionRequirement] = Field(default_factory=list)
+
+
+class OpponentStrategy(Contract):
+    steps: list[OpponentPositionStep] = Field(min_length=3)
+
+    @model_validator(mode="after")
+    def steps_form_position_ladder(self) -> Self:
+        if self.steps[0].kind != "declared" or self.steps[-1].kind != "red_line":
+            raise ValueError("position ladder must start declared and end at red line")
+        if sum(step.kind == "target" for step in self.steps) != 1:
+            raise ValueError("position ladder needs exactly one target")
+        if self.steps[0].requires:
+            raise ValueError("declared position cannot require a concession")
+        step_ids = [step.id for step in self.steps]
+        if len(step_ids) != len(set(step_ids)):
+            raise ValueError("position step ids must be unique")
+        requirement_ids = [item.id for step in self.steps for item in step.requires]
+        if len(requirement_ids) != len(set(requirement_ids)):
+            raise ValueError("concession requirement ids must be unique")
+        for previous, current in zip(self.steps, self.steps[1:], strict=False):
+            if (
+                current.terms.control_weeks > previous.terms.control_weeks
+                or current.terms.kpi_percent > previous.terms.kpi_percent
+            ):
+                raise ValueError("later position steps cannot worsen numeric terms")
+        return self
+
+
 class CaseConfig(Contract):
     id: str
     title: str
@@ -70,14 +116,22 @@ class CaseConfig(Contract):
     opponent_private_context: str
     agreement_rules: AgreementRules = Field(default_factory=AgreementRules)
     opponent_private_phrases: list[str] = Field(default_factory=list)
+    opponent_strategy: OpponentStrategy | None = None
 
-
-class DealTerms(Contract):
-    control_weeks: int = Field(ge=0)
-    kpi_percent: int = Field(ge=0)
-    automatic_raise: bool
-    employee_commitments: list[str] = Field(min_length=1)
-    director_commitments: list[str] = Field(min_length=1)
+    @model_validator(mode="after")
+    def strategy_respects_agreement_rules(self) -> Self:
+        if self.opponent_strategy is None:
+            return self
+        rules = self.agreement_rules
+        for step in self.opponent_strategy.steps:
+            terms = step.terms
+            if not (
+                rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
+                and rules.min_kpi_percent <= terms.kpi_percent <= rules.max_kpi_percent
+                and (terms.automatic_raise or not rules.require_automatic_raise)
+            ):
+                raise ValueError("position step is outside agreement rules")
+        return self
 
 
 class AgreementResolution(DealTerms):
@@ -106,11 +160,38 @@ type OpponentResolution = Annotated[
 ]
 
 
+class AppliedPositionTransition(Contract):
+    from_step_id: str = Field(min_length=1)
+    to_step_id: str = Field(min_length=1)
+    requirement_ids: list[NonEmptyText] = Field(min_length=1)
+    evidence_turn_id: str = Field(min_length=1)
+    evidence_quote: str = Field(min_length=1)
+
+
+class OpponentPositionProgress(Contract):
+    current_step_id: str = Field(min_length=1)
+    satisfied_requirement_ids: list[NonEmptyText] = Field(default_factory=list)
+    last_transition: AppliedPositionTransition | None = None
+
+    @model_validator(mode="after")
+    def transition_matches_progress(self) -> Self:
+        if len(self.satisfied_requirement_ids) != len(set(self.satisfied_requirement_ids)):
+            raise ValueError("satisfied concession requirements must be unique")
+        if self.last_transition is not None and (
+            self.last_transition.to_step_id != self.current_step_id
+            or not set(self.last_transition.requirement_ids)
+            <= set(self.satisfied_requirement_ids)
+        ):
+            raise ValueError("last transition and position progress disagree")
+        return self
+
+
 class SessionState(Contract):
     turn_count: int = Field(ge=0)
     stage: Literal["negotiating", "agreed", "partial_agreement", "deferred"] = "negotiating"
     agreement: DealTerms | None = None
     decision: InterimDecision | None = None
+    opponent_progress: OpponentPositionProgress | None = None
 
     @model_validator(mode="after")
     def agreement_matches_stage(self) -> Self:
@@ -159,9 +240,16 @@ class TurnResponse(Contract):
     error_code: ModelErrorCode | None = None
 
 
+class ProposedPositionTransition(Contract):
+    to_step_id: str = Field(min_length=1)
+    requirement_ids: list[NonEmptyText] = Field(min_length=1)
+    evidence_quote: str = Field(min_length=1)
+
+
 class OpponentProposal(Contract):
     text: str = Field(min_length=1)
     resolution: OpponentResolution | None = None
+    position_transition: ProposedPositionTransition | None = None
 
 
 class PreparationCard(Contract):
@@ -232,6 +320,7 @@ class OpponentContext(Contract):
     shared_context: str
     opponent_private_context: str
     agreement_rules: AgreementRules
+    opponent_strategy: OpponentStrategy | None
     player_role: str
     opponent_role: str
     state: SessionState

@@ -39,8 +39,9 @@ from arena_ai.contracts import (
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
+from arena_ai.opponent_position import apply_position_transition
 from arena_ai.outcome import determine_outcome
-from arena_ai.privacy import contains_private_phrase, public_transcript
+from arena_ai.privacy import contains_private_phrase, public_session_state, public_transcript
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
 
 SERVICE_BEARER = HTTPBearer(auto_error=False)
@@ -204,7 +205,9 @@ def blocked_turn_response(request: TurnRequest, reason: GuardReason) -> TurnResp
     safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
     snapshot = SessionSnapshot(
         session_id=request.snapshot.session_id,
-        state=SessionState(turn_count=request.snapshot.state.turn_count + 1),
+        state=request.snapshot.state.model_copy(
+            update={"turn_count": request.snapshot.state.turn_count + 1}
+        ),
         transcript=[
             *request.snapshot.transcript,
             TranscriptEntry(
@@ -325,7 +328,7 @@ def create_app(
                 shared_context=request.case.shared_context,
                 player_role=request.case.player_role,
                 opponent_role=request.case.opponent_role,
-                state=request.snapshot.state,
+                state=public_session_state(request.snapshot.state),
                 transcript=public_transcript(request.snapshot.transcript),
                 user_text=request.user_text,
             )
@@ -359,6 +362,7 @@ def create_app(
             shared_context=request.case.shared_context,
             opponent_private_context=request.case.opponent_private_context,
             agreement_rules=request.case.agreement_rules,
+            opponent_strategy=request.case.opponent_strategy,
             player_role=request.case.player_role,
             opponent_role=request.case.opponent_role,
             state=request.snapshot.state,
@@ -370,16 +374,24 @@ def create_app(
                 proposal = OpponentProposal.model_validate(raw)
             except ValueError:
                 return None
-            return (
-                proposal
-                if valid_proposal(
-                    proposal,
-                    request.case,
-                    request.user_text,
-                    request.snapshot.transcript,
+            if not valid_proposal(
+                proposal,
+                request.case,
+                request.user_text,
+                request.snapshot.transcript,
+            ):
+                return None
+            try:
+                apply_position_transition(
+                    strategy=request.case.opponent_strategy,
+                    current=request.snapshot.state.opponent_progress,
+                    proposal=proposal,
+                    user_text=request.user_text,
+                    turn_id=request.turn_id,
                 )
-                else None
-            )
+            except ValueError:
+                return None
+            return proposal
 
         proposal_result = await validated_model_call(
             lambda: active_opponent.respond(context),
@@ -429,6 +441,13 @@ def create_app(
                 return model_failure_response(request, "validator_uncertain")
             if validation.decision == "reject":
                 return model_failure_response(request, "invalid_opponent_output")
+        opponent_progress = apply_position_transition(
+            strategy=request.case.opponent_strategy,
+            current=request.snapshot.state.opponent_progress,
+            proposal=proposal,
+            user_text=request.user_text,
+            turn_id=request.turn_id,
+        )
         resolution = proposal.resolution
         agreement = (
             resolution.as_deal_terms()
@@ -451,6 +470,7 @@ def create_app(
                 ),
                 agreement=agreement,
                 decision=decision,
+                opponent_progress=opponent_progress,
             ),
             transcript=[
                 *request.snapshot.transcript,

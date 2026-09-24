@@ -13,7 +13,7 @@ from arena_ai.contracts import (
     TrainerSlot,
 )
 from arena_ai.model_recovery import validated_model_call
-from arena_ai.privacy import contains_private_phrase, public_transcript
+from arena_ai.privacy import contains_private_phrase, public_session_state, public_transcript
 
 
 class Trainer(Protocol):
@@ -174,7 +174,7 @@ async def train_duel(
         shared_context=case.shared_context,
         player_role=case.player_role,
         opponent_role=case.opponent_role,
-        state=snapshot.state,
+        state=public_session_state(snapshot.state),
         transcript=public_transcript(snapshot.transcript),
         outcome=outcome,
         preparation=preparation,

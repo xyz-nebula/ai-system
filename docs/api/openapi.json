@@ -37,6 +37,48 @@
         "title": "AgreementRules",
         "type": "object"
       },
+      "AppliedPositionTransition": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_quote": {
+            "minLength": 1,
+            "title": "Evidence Quote",
+            "type": "string"
+          },
+          "evidence_turn_id": {
+            "minLength": 1,
+            "title": "Evidence Turn Id",
+            "type": "string"
+          },
+          "from_step_id": {
+            "minLength": 1,
+            "title": "From Step Id",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "minItems": 1,
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "to_step_id": {
+            "minLength": 1,
+            "title": "To Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_step_id",
+          "to_step_id",
+          "requirement_ids",
+          "evidence_turn_id",
+          "evidence_quote"
+        ],
+        "title": "AppliedPositionTransition",
+        "type": "object"
+      },
       "CaseConfig": {
         "additionalProperties": false,
         "properties": {
@@ -61,6 +103,16 @@
           "opponent_role": {
             "title": "Opponent Role",
             "type": "string"
+          },
+          "opponent_strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpponentStrategy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "player_private_context": {
             "title": "Player Private Context",
@@ -127,6 +179,27 @@
           "consequence"
         ],
         "title": "CoachingPoint",
+        "type": "object"
+      },
+      "ConcessionRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "title": "ConcessionRequirement",
         "type": "object"
       },
       "DealTerms": {
@@ -423,6 +496,93 @@
       "NonEmptyText": {
         "minLength": 1,
         "type": "string"
+      },
+      "OpponentPositionProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "current_step_id": {
+            "minLength": 1,
+            "title": "Current Step Id",
+            "type": "string"
+          },
+          "last_transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPositionTransition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "satisfied_requirement_ids": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "title": "Satisfied Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_step_id"
+        ],
+        "title": "OpponentPositionProgress",
+        "type": "object"
+      },
+      "OpponentPositionStep": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "declared",
+              "intermediate",
+              "target",
+              "red_line"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "requires": {
+            "items": {
+              "$ref": "#/components/schemas/ConcessionRequirement"
+            },
+            "title": "Requires",
+            "type": "array"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/DealTerms"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "terms"
+        ],
+        "title": "OpponentPositionStep",
+        "type": "object"
+      },
+      "OpponentStrategy": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/OpponentPositionStep"
+            },
+            "minItems": 3,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "OpponentStrategy",
+        "type": "object"
       },
       "OutcomeResult": {
         "additionalProperties": false,
@@ -815,6 +975,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/InterimDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opponent_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpponentPositionProgress"
               },
               {
                 "type": "null"

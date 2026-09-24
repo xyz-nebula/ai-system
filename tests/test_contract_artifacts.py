@@ -24,7 +24,7 @@ def test_managed_turn_examples_match_public_contracts_and_use_placeholders() -> 
     case = examples["case"]
     scenarios = examples["scenarios"]
 
-    for name in ("accepted", "blocked", "model_error"):
+    for name in ("accepted", "position_transition", "blocked", "model_error"):
         request = TurnRequest.model_validate({"case": case, **scenarios[name]["request"]["body"]})
         response = TurnResponse.model_validate(scenarios[name]["response"]["body"])
         assert response.session_id == request.snapshot.session_id

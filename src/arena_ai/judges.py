@@ -13,7 +13,7 @@ from arena_ai.contracts import (
     SessionSnapshot,
 )
 from arena_ai.model_recovery import validated_model_call
-from arena_ai.privacy import contains_private_phrase, public_transcript
+from arena_ai.privacy import contains_private_phrase, public_session_state, public_transcript
 
 COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
 RUBRICS: dict[JudgeCollege, str] = {
@@ -97,7 +97,7 @@ async def judge_duel(
             shared_context=case.shared_context,
             player_role=case.player_role,
             opponent_role=case.opponent_role,
-            state=snapshot.state,
+            state=public_session_state(snapshot.state),
             transcript=visible_transcript,
             outcome=outcome,
         )

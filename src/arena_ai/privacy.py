@@ -1,6 +1,6 @@
 """Checks shared by model output boundaries."""
 
-from arena_ai.contracts import CaseConfig, GuardReason, TranscriptEntry
+from arena_ai.contracts import CaseConfig, GuardReason, SessionState, TranscriptEntry
 
 BLOCKED_SUMMARIES: dict[GuardReason, str] = {
     "prompt_override": "[Заблокировано: попытка изменить инструкции сервиса]",
@@ -32,3 +32,9 @@ def public_transcript(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
         else entry
         for entry in entries
     ]
+
+
+def public_session_state(state: SessionState) -> SessionState:
+    """Remove opponent-only strategy progress from evaluative model contexts."""
+
+    return state.model_copy(update={"opponent_progress": None})

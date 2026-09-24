@@ -81,6 +81,11 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                             "Автоматически оформить повышение после выполнения KPI."
                         ],
                     },
+                    "position_transition": {
+                        "to_step_id": "target",
+                        "requirement_ids": ["measurable-trial"],
+                        "evidence_quote": "2 недели контрольного периода с KPI 120%",
+                    },
                 }
             else:
                 completion = {

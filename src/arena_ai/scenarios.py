@@ -31,6 +31,82 @@ NEXT_DAY_CASE = CaseConfig.model_validate(
             "max_kpi_percent": 130,
             "require_automatic_raise": True,
         },
+        "opponent_strategy": {
+            "steps": [
+                {
+                    "id": "declared",
+                    "kind": "declared",
+                    "terms": {
+                        "control_weeks": 4,
+                        "kpi_percent": 130,
+                        "automatic_raise": True,
+                        "employee_commitments": [
+                            "Компенсировать последствия пропуска",
+                            "Выполнить KPI 130% за четыре недели",
+                            "Не допускать новых нарушений дисциплины",
+                            "Сообщать о форс-мажоре сразу",
+                        ],
+                        "director_commitments": [
+                            "Автоматически повысить зарплату после выполнения условий"
+                        ],
+                    },
+                    "requires": [],
+                },
+                {
+                    "id": "target",
+                    "kind": "target",
+                    "terms": {
+                        "control_weeks": 2,
+                        "kpi_percent": 120,
+                        "automatic_raise": True,
+                        "employee_commitments": [
+                            "Компенсировать последствия пропуска",
+                            "Выполнить KPI 120% за две недели",
+                            "Не допускать новых нарушений дисциплины",
+                            "Сообщать о форс-мажоре сразу",
+                        ],
+                        "director_commitments": [
+                            "Автоматически повысить зарплату после выполнения условий"
+                        ],
+                    },
+                    "requires": [
+                        {
+                            "id": "measurable-trial",
+                            "description": (
+                                "Менеджер предлагает измеримый контрольный период с KPI "
+                                "и автоматическим повышением после выполнения"
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "id": "red-line",
+                    "kind": "red_line",
+                    "terms": {
+                        "control_weeks": 1,
+                        "kpi_percent": 120,
+                        "automatic_raise": True,
+                        "employee_commitments": [
+                            "Закрыть последствия пропущенного дня",
+                            "Выполнить KPI 120% за одну неделю",
+                            "Сообщать о форс-мажоре сразу",
+                        ],
+                        "director_commitments": [
+                            "Автоматически повысить зарплату после выполнения условий"
+                        ],
+                    },
+                    "requires": [
+                        {
+                            "id": "prevent-repeat",
+                            "description": (
+                                "Менеджер берёт конкретные обязательства закрыть последствия "
+                                "пропуска и сразу сообщать о новых форс-мажорах"
+                            ),
+                        }
+                    ],
+                },
+            ]
+        },
     }
 )
 
