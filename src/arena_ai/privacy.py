@@ -1,12 +1,26 @@
 """Checks shared by model output boundaries."""
 
-from arena_ai.contracts import CaseConfig, GuardReason, SessionState, TranscriptEntry
+from dataclasses import dataclass
+
+from arena_ai.contracts import (
+    CaseConfig,
+    GuardReason,
+    PublicSessionState,
+    SessionSnapshot,
+    TranscriptEntry,
+)
 
 BLOCKED_SUMMARIES: dict[GuardReason, str] = {
     "prompt_override": "[Заблокировано: попытка изменить инструкции сервиса]",
     "private_data_request": "[Заблокировано: запрос закрытых вводных]",
     "hidden_position_request": "[Заблокировано: запрос скрытой переговорной позиции]",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class PublicDuelView:
+    state: PublicSessionState
+    transcript: list[TranscriptEntry]
 
 
 def contains_private_phrase(text: str, case: CaseConfig) -> bool:
@@ -34,7 +48,18 @@ def public_transcript(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
     ]
 
 
-def public_session_state(state: SessionState) -> SessionState:
+def public_session_state(snapshot: SessionSnapshot) -> PublicSessionState:
     """Remove opponent-only strategy progress from evaluative model contexts."""
 
-    return state.model_copy(update={"opponent_progress": None})
+    return PublicSessionState.model_validate(
+        snapshot.state.model_dump(mode="python", exclude={"opponent_progress"})
+    )
+
+
+def public_duel_view(snapshot: SessionSnapshot) -> PublicDuelView:
+    """Project a snapshot once for model roles that must not see opponent-only state."""
+
+    return PublicDuelView(
+        state=public_session_state(snapshot),
+        transcript=public_transcript(snapshot.transcript),
+    )

@@ -1,0 +1,134 @@
+{
+  "audience": "Backend integration only",
+  "display_policy": "Do not forward opponent_strategy or opponent_progress to player-facing clients.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/turn",
+    "body": {
+      "case": {
+        "id": "placeholder-case",
+        "title": "Placeholder negotiation",
+        "shared_context": "Public placeholder context.",
+        "player_role": "Participant A",
+        "opponent_role": "Participant B",
+        "player_private_context": "[REDACTED: supplied by Backend at runtime]",
+        "opponent_private_context": "[REDACTED: supplied by Backend at runtime]",
+        "agreement_rules": {
+          "min_control_weeks": 1,
+          "max_control_weeks": 6,
+          "min_kpi_percent": 100,
+          "max_kpi_percent": 150,
+          "require_automatic_raise": true
+        },
+        "opponent_strategy": {
+          "steps": [
+            {
+              "id": "backend-step-a",
+              "kind": "declared",
+              "terms": {
+                "control_weeks": 6,
+                "kpi_percent": 140,
+                "automatic_raise": true,
+                "employee_commitments": ["Placeholder commitment A"],
+                "director_commitments": ["Placeholder commitment B"]
+              },
+              "requires": []
+            },
+            {
+              "id": "backend-step-b",
+              "kind": "target",
+              "terms": {
+                "control_weeks": 3,
+                "kpi_percent": 125,
+                "automatic_raise": true,
+                "employee_commitments": ["Placeholder commitment C"],
+                "director_commitments": ["Placeholder commitment D"]
+              },
+              "requires": [
+                {
+                  "id": "backend-concession-a",
+                  "description": "Placeholder machine-checkable concession",
+                  "direct_commitment_markers": ["предлагаю"],
+                  "evidence_groups": []
+                }
+              ]
+            },
+            {
+              "id": "backend-step-c",
+              "kind": "red_line",
+              "terms": {
+                "control_weeks": 2,
+                "kpi_percent": 115,
+                "automatic_raise": true,
+                "employee_commitments": ["Placeholder commitment E"],
+                "director_commitments": ["Placeholder commitment F"]
+              },
+              "requires": [
+                {
+                  "id": "backend-concession-b",
+                  "description": "Second placeholder machine-checkable concession",
+                  "direct_commitment_markers": ["обязуюсь"],
+                  "evidence_groups": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "snapshot": {
+        "session_id": "backend-position-example",
+        "state": {
+          "turn_count": 0,
+          "opponent_progress": {
+            "current_step_id": "backend-step-a",
+            "satisfied_requirement_ids": []
+          }
+        },
+        "transcript": []
+      },
+      "turn_id": "turn-1",
+      "user_text": "Предлагаю 3 недели контроля с KPI 125% и автоматическим повышением."
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "body": {
+      "session_id": "backend-position-example",
+      "turn_id": "turn-1",
+      "status": "accepted",
+      "opponent_text": "Готов на 3 недели контроля, KPI 125% и автоматическое повышение.",
+      "snapshot": {
+        "session_id": "backend-position-example",
+        "state": {
+          "turn_count": 1,
+          "stage": "negotiating",
+          "opponent_progress": {
+            "current_step_id": "backend-step-b",
+            "satisfied_requirement_ids": ["backend-concession-a"],
+            "last_transition": {
+              "from_step_id": "backend-step-a",
+              "to_step_id": "backend-step-b",
+              "requirement_ids": ["backend-concession-a"],
+              "evidence_turn_id": "turn-1",
+              "evidence_quote": "Предлагаю 3 недели контроля с KPI 125% и автоматическим повышением."
+            }
+          }
+        },
+        "transcript": [
+          {
+            "turn_id": "turn-1",
+            "speaker": "player",
+            "status": "accepted",
+            "text": "Предлагаю 3 недели контроля с KPI 125% и автоматическим повышением."
+          },
+          {
+            "turn_id": "turn-1",
+            "speaker": "opponent",
+            "status": "accepted",
+            "text": "Готов на 3 недели контроля, KPI 125% и автоматическое повышение."
+          }
+        ]
+      }
+    }
+  }
+}

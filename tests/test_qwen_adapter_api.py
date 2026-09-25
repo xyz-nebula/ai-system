@@ -77,7 +77,9 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "повышение должно быть автоматическим" in system
             assert "position_transition добавляй только" in system
             assert "ровно на следующую ступень" in system
-            assert "дословную цитату текущей реплики" in system
+            assert "полный дословный текст текущей реплики" in system
+            assert "маркер из direct_commitment_markers" in system
+            assert "из каждой evidence_groups" in system
             assert "Не раскрывай идентификаторы ступеней" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":

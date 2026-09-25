@@ -32,6 +32,7 @@ type ReadinessFailureCategory = Literal[
     "model_not_found",
 ]
 type NonEmptyText = Annotated[str, Field(min_length=1)]
+type EvidenceMarkerGroup = Annotated[list[NonEmptyText], Field(min_length=1)]
 
 
 class Contract(BaseModel):
@@ -71,6 +72,8 @@ class DealTerms(Contract):
 class ConcessionRequirement(Contract):
     id: str = Field(min_length=1)
     description: str = Field(min_length=1)
+    direct_commitment_markers: list[NonEmptyText] = Field(min_length=1)
+    evidence_groups: list[EvidenceMarkerGroup] = Field(default_factory=list)
 
 
 class OpponentPositionStep(Contract):
@@ -87,10 +90,16 @@ class OpponentStrategy(Contract):
     def steps_form_position_ladder(self) -> Self:
         if self.steps[0].kind != "declared" or self.steps[-1].kind != "red_line":
             raise ValueError("position ladder must start declared and end at red line")
-        if sum(step.kind == "target" for step in self.steps) != 1:
-            raise ValueError("position ladder needs exactly one target")
+        kind_counts = {
+            kind: sum(step.kind == kind for step in self.steps)
+            for kind in ("declared", "target", "red_line")
+        }
+        if kind_counts != {"declared": 1, "target": 1, "red_line": 1}:
+            raise ValueError("position ladder needs one declared, target, and red-line step")
         if self.steps[0].requires:
             raise ValueError("declared position cannot require a concession")
+        if any(not step.requires for step in self.steps[1:]):
+            raise ValueError("later position steps require a concession")
         step_ids = [step.id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
             raise ValueError("position step ids must be unique")
@@ -177,6 +186,8 @@ class OpponentPositionProgress(Contract):
     def transition_matches_progress(self) -> Self:
         if len(self.satisfied_requirement_ids) != len(set(self.satisfied_requirement_ids)):
             raise ValueError("satisfied concession requirements must be unique")
+        if self.satisfied_requirement_ids and self.last_transition is None:
+            raise ValueError("progressed position needs its last transition evidence")
         if self.last_transition is not None and (
             self.last_transition.to_step_id != self.current_step_id
             or not set(self.last_transition.requirement_ids)
@@ -186,12 +197,11 @@ class OpponentPositionProgress(Contract):
         return self
 
 
-class SessionState(Contract):
+class SessionDecisionState(Contract):
     turn_count: int = Field(ge=0)
     stage: Literal["negotiating", "agreed", "partial_agreement", "deferred"] = "negotiating"
     agreement: DealTerms | None = None
     decision: InterimDecision | None = None
-    opponent_progress: OpponentPositionProgress | None = None
 
     @model_validator(mode="after")
     def agreement_matches_stage(self) -> Self:
@@ -208,6 +218,14 @@ class SessionState(Contract):
         elif self.agreement is not None or self.decision is not None:
             raise ValueError("negotiating stage cannot have a decision")
         return self
+
+
+class PublicSessionState(SessionDecisionState):
+    """Session state safe for model roles that must not see opponent strategy progress."""
+
+
+class SessionState(SessionDecisionState):
+    opponent_progress: OpponentPositionProgress | None = None
 
 
 class TranscriptEntry(Contract):
@@ -332,7 +350,7 @@ class GuardContext(Contract):
     shared_context: str
     player_role: str
     opponent_role: str
-    state: SessionState
+    state: PublicSessionState
     transcript: list[TranscriptEntry]
     user_text: str
 
@@ -368,7 +386,7 @@ class JudgeContext(Contract):
     shared_context: str
     player_role: str
     opponent_role: str
-    state: SessionState
+    state: PublicSessionState
     transcript: list[TranscriptEntry]
     outcome: OutcomeResult
 
@@ -404,7 +422,7 @@ class TrainerContext(Contract):
     shared_context: str
     player_role: str
     opponent_role: str
-    state: SessionState
+    state: PublicSessionState
     transcript: list[TranscriptEntry]
     outcome: OutcomeResult
     preparation: PreparationCard | None = None

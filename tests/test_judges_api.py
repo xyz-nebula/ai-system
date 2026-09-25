@@ -24,6 +24,13 @@ FINISH_PAYLOAD = {
             "opponent_progress": {
                 "current_step_id": "private-target-step",
                 "satisfied_requirement_ids": ["private-requirement"],
+                "last_transition": {
+                    "from_step_id": "private-declared-step",
+                    "to_step_id": "private-target-step",
+                    "requirement_ids": ["private-requirement"],
+                    "evidence_turn_id": "turn-1",
+                    "evidence_quote": "Готов компенсировать пропуск и обсудить KPI.",
+                },
             },
         },
         "transcript": [

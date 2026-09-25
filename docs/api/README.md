@@ -1,9 +1,12 @@
 # Интеграционный контракт AI-сервиса
 
 - `openapi.json` — зафиксированная схема работающего AI-сервиса.
-- `examples/managed-turn.json` — безопасные примеры `accepted`, проверенного перехода позиции,
-  `blocked`, `model_error`, 409 и 401. Значения закрытых вводных и service token заменены
-  placeholders.
+- `examples/managed-turn.json` — безопасные примеры `accepted`, `blocked`, `model_error`, 409 и
+  401. Значения закрытых вводных и service token заменены placeholders; внутренняя стратегия
+  оппонента и её прогресс намеренно не показаны.
+- `examples/backend-position-turn.json` — отдельный Backend-only пример расширенного контракта
+  позиции с вымышленными ID. Поля `opponent_strategy` и `opponent_progress` нельзя передавать в
+  пользовательский интерфейс.
 - `examples/preparation-card.json` — минимальная локальная карточка для `arena-ai --preparation-file`.
 - `examples/preparation-finish.json` — полный пример `POST /v1/finish` с карточкой и проверяемым `plan_vs_reality`.
 

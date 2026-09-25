@@ -13,7 +13,7 @@ from arena_ai.contracts import (
     TrainerSlot,
 )
 from arena_ai.model_recovery import validated_model_call
-from arena_ai.privacy import contains_private_phrase, public_session_state, public_transcript
+from arena_ai.privacy import contains_private_phrase, public_duel_view
 
 
 class Trainer(Protocol):
@@ -168,14 +168,15 @@ async def train_duel(
 ) -> TrainerSlot:
     if preparation is not None and not preparation.has_content():
         preparation = None
+    public_view = public_duel_view(snapshot)
     context = TrainerContext(
         case_id=case.id,
         case_title=case.title,
         shared_context=case.shared_context,
         player_role=case.player_role,
         opponent_role=case.opponent_role,
-        state=public_session_state(snapshot.state),
-        transcript=public_transcript(snapshot.transcript),
+        state=public_view.state,
+        transcript=public_view.transcript,
         outcome=outcome,
         preparation=preparation,
     )

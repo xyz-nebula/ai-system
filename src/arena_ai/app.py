@@ -24,6 +24,7 @@ from arena_ai.contracts import (
     LivenessResponse,
     ModelErrorCode,
     OpponentContext,
+    OpponentPositionProgress,
     OpponentProposal,
     PartialDecision,
     ReadinessFailureCategory,
@@ -41,7 +42,7 @@ from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
 from arena_ai.opponent_position import apply_position_transition
 from arena_ai.outcome import determine_outcome
-from arena_ai.privacy import contains_private_phrase, public_session_state, public_transcript
+from arena_ai.privacy import contains_private_phrase, public_duel_view, public_transcript
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
 
 SERVICE_BEARER = HTTPBearer(auto_error=False)
@@ -324,12 +325,13 @@ def create_app(
         if blocked_reason is not None:
             return blocked_turn_response(request, blocked_reason)
         if guard is not None:
+            public_view = public_duel_view(request.snapshot)
             guard_context = GuardContext(
                 shared_context=request.case.shared_context,
                 player_role=request.case.player_role,
                 opponent_role=request.case.opponent_role,
-                state=public_session_state(request.snapshot.state),
-                transcript=public_transcript(request.snapshot.transcript),
+                state=public_view.state,
+                transcript=public_view.transcript,
                 user_text=request.user_text,
             )
             def validated_guard(raw: object) -> GuardDecision | None:
@@ -369,7 +371,9 @@ def create_app(
             transcript=public_transcript(request.snapshot.transcript),
             user_text=request.user_text,
         )
-        def validated_proposal(raw: object) -> OpponentProposal | None:
+        def validated_proposal(
+            raw: object,
+        ) -> tuple[OpponentProposal, OpponentPositionProgress | None] | None:
             try:
                 proposal = OpponentProposal.model_validate(raw)
             except ValueError:
@@ -382,16 +386,17 @@ def create_app(
             ):
                 return None
             try:
-                apply_position_transition(
+                opponent_progress = apply_position_transition(
                     strategy=request.case.opponent_strategy,
                     current=request.snapshot.state.opponent_progress,
                     proposal=proposal,
                     user_text=request.user_text,
                     turn_id=request.turn_id,
+                    transcript=request.snapshot.transcript,
                 )
             except ValueError:
                 return None
-            return proposal
+            return proposal, opponent_progress
 
         proposal_result = await validated_model_call(
             lambda: active_opponent.respond(context),
@@ -407,7 +412,7 @@ def create_app(
                     else "invalid_opponent_output"
                 ),
             )
-        proposal = proposal_result.value
+        proposal, opponent_progress = proposal_result.value
         if validator is not None:
             validation_context = ValidationContext(
                 case=request.case,
@@ -441,13 +446,6 @@ def create_app(
                 return model_failure_response(request, "validator_uncertain")
             if validation.decision == "reject":
                 return model_failure_response(request, "invalid_opponent_output")
-        opponent_progress = apply_position_transition(
-            strategy=request.case.opponent_strategy,
-            current=request.snapshot.state.opponent_progress,
-            proposal=proposal,
-            user_text=request.user_text,
-            turn_id=request.turn_id,
-        )
         resolution = proposal.resolution
         agreement = (
             resolution.as_deal_terms()

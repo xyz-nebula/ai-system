@@ -76,15 +76,20 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                         "control_weeks": 2,
                         "kpi_percent": 120,
                         "automatic_raise": True,
-                        "employee_commitments": ["Выполнить KPI 120% за две недели."],
+                        "employee_commitments": [
+                            "Компенсировать последствия пропуска",
+                            "Выполнить KPI 120% за две недели",
+                            "Не допускать новых нарушений дисциплины",
+                            "Сообщать о форс-мажоре сразу",
+                        ],
                         "director_commitments": [
-                            "Автоматически оформить повышение после выполнения KPI."
+                            "Автоматически повысить зарплату после выполнения условий"
                         ],
                     },
                     "position_transition": {
                         "to_step_id": "target",
                         "requirement_ids": ["measurable-trial"],
-                        "evidence_quote": "2 недели контрольного периода с KPI 120%",
+                        "evidence_quote": user_text,
                     },
                 }
             else:

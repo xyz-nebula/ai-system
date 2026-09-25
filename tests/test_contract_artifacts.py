@@ -24,7 +24,7 @@ def test_managed_turn_examples_match_public_contracts_and_use_placeholders() -> 
     case = examples["case"]
     scenarios = examples["scenarios"]
 
-    for name in ("accepted", "position_transition", "blocked", "model_error"):
+    for name in ("accepted", "blocked", "model_error"):
         request = TurnRequest.model_validate({"case": case, **scenarios[name]["request"]["body"]})
         response = TurnResponse.model_validate(scenarios[name]["response"]["body"])
         assert response.session_id == request.snapshot.session_id
@@ -39,6 +39,24 @@ def test_managed_turn_examples_match_public_contracts_and_use_placeholders() -> 
     assert examples["request_body_rule"].startswith("Send the top-level case")
     assert case["player_private_context"].startswith("[REDACTED:")
     assert case["opponent_private_context"].startswith("[REDACTED:")
+
+
+def test_backend_position_example_matches_internal_contract_without_real_ids() -> None:
+    example = json.loads(
+        (ROOT / "docs" / "api" / "examples" / "backend-position-turn.json").read_text()
+    )
+
+    request = TurnRequest.model_validate(example["request"]["body"])
+    response = TurnResponse.model_validate(example["response"]["body"])
+    serialized = json.dumps(example, ensure_ascii=False)
+
+    assert example["audience"] == "Backend integration only"
+    assert example["display_policy"].startswith("Do not forward")
+    assert response.session_id == request.snapshot.session_id
+    assert response.snapshot.state.opponent_progress is not None
+    assert response.snapshot.state.opponent_progress.current_step_id == "backend-step-b"
+    for real_identifier in ("measurable-trial", "prevent-repeat", "red-line"):
+        assert real_identifier not in serialized
 
 
 def test_preparation_finish_example_matches_public_contracts() -> None:

@@ -6,57 +6,7 @@
     "player_role": "Менеджер",
     "opponent_role": "Генеральный директор",
     "player_private_context": "[REDACTED: supplied by Backend at runtime]",
-    "opponent_private_context": "[REDACTED: supplied by Backend at runtime]",
-    "opponent_strategy": {
-      "steps": [
-        {
-          "id": "declared",
-          "kind": "declared",
-          "terms": {
-            "control_weeks": 4,
-            "kpi_percent": 130,
-            "automatic_raise": true,
-            "employee_commitments": ["Выполнить KPI 130% за четыре недели"],
-            "director_commitments": ["Повысить зарплату после выполнения условий"]
-          },
-          "requires": []
-        },
-        {
-          "id": "target",
-          "kind": "target",
-          "terms": {
-            "control_weeks": 2,
-            "kpi_percent": 120,
-            "automatic_raise": true,
-            "employee_commitments": ["Выполнить KPI 120% за две недели"],
-            "director_commitments": ["Повысить зарплату после выполнения условий"]
-          },
-          "requires": [
-            {
-              "id": "measurable-trial",
-              "description": "Предложить измеримый контрольный период"
-            }
-          ]
-        },
-        {
-          "id": "red-line",
-          "kind": "red_line",
-          "terms": {
-            "control_weeks": 1,
-            "kpi_percent": 120,
-            "automatic_raise": true,
-            "employee_commitments": ["Выполнить KPI 120% за одну неделю"],
-            "director_commitments": ["Повысить зарплату после выполнения условий"]
-          },
-          "requires": [
-            {
-              "id": "prevent-repeat",
-              "description": "Предложить конкретный способ предотвратить повторный срыв"
-            }
-          ]
-        }
-      ]
-    }
+    "opponent_private_context": "[REDACTED: supplied by Backend at runtime]"
   },
   "authorized_headers": {
     "Authorization": "Bearer <service-token>",
@@ -91,11 +41,7 @@
             "session_id": "example-accepted",
             "state": {
               "turn_count": 1,
-              "stage": "negotiating",
-              "opponent_progress": {
-                "current_step_id": "declared",
-                "satisfied_requirement_ids": []
-              }
+              "stage": "negotiating"
             },
             "transcript": [
               {
@@ -109,64 +55,6 @@
                 "speaker": "opponent",
                 "status": "accepted",
                 "text": "Давайте согласуем измеримые условия."
-              }
-            ]
-          }
-        }
-      }
-    },
-    "position_transition": {
-      "request": {
-        "method": "POST",
-        "path": "/v1/turn",
-        "body": {
-          "snapshot": {
-            "session_id": "example-position",
-            "state": {
-              "turn_count": 0
-            },
-            "transcript": []
-          },
-          "turn_id": "turn-1",
-          "user_text": "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-        }
-      },
-      "response": {
-        "status_code": 200,
-        "body": {
-          "session_id": "example-position",
-          "turn_id": "turn-1",
-          "status": "accepted",
-          "opponent_text": "Готов обсуждать 2 недели контроля, KPI 120% и автоматическое повышение.",
-          "snapshot": {
-            "session_id": "example-position",
-            "state": {
-              "turn_count": 1,
-              "stage": "negotiating",
-              "opponent_progress": {
-                "current_step_id": "target",
-                "satisfied_requirement_ids": ["measurable-trial"],
-                "last_transition": {
-                  "from_step_id": "declared",
-                  "to_step_id": "target",
-                  "requirement_ids": ["measurable-trial"],
-                  "evidence_turn_id": "turn-1",
-                  "evidence_quote": "2 недели контроля с KPI 120%"
-                }
-              }
-            },
-            "transcript": [
-              {
-                "turn_id": "turn-1",
-                "speaker": "player",
-                "status": "accepted",
-                "text": "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-              },
-              {
-                "turn_id": "turn-1",
-                "speaker": "opponent",
-                "status": "accepted",
-                "text": "Готов обсуждать 2 недели контроля, KPI 120% и автоматическое повышение."
               }
             ]
           }

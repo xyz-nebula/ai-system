@@ -189,6 +189,21 @@
             "title": "Description",
             "type": "string"
           },
+          "direct_commitment_markers": {
+            "items": {
+              "$ref": "#/components/schemas/NonEmptyText"
+            },
+            "minItems": 1,
+            "title": "Direct Commitment Markers",
+            "type": "array"
+          },
+          "evidence_groups": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceMarkerGroup"
+            },
+            "title": "Evidence Groups",
+            "type": "array"
+          },
           "id": {
             "minLength": 1,
             "title": "Id",
@@ -197,7 +212,8 @@
         },
         "required": [
           "id",
-          "description"
+          "description",
+          "direct_commitment_markers"
         ],
         "title": "ConcessionRequirement",
         "type": "object"
@@ -272,6 +288,13 @@
         ],
         "title": "DeferredDecision",
         "type": "object"
+      },
+      "EvidenceMarkerGroup": {
+        "items": {
+          "$ref": "#/components/schemas/NonEmptyText"
+        },
+        "minItems": 1,
+        "type": "array"
       },
       "FinishRequest": {
         "additionalProperties": false,
