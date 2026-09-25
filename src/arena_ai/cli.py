@@ -136,6 +136,7 @@ def main() -> None:
                     verdict = slot.verdict
                     choice = "Менеджер" if verdict.choice == "player" else "Директор"
                     print(f"    Выбор: {choice}")
+                    print(f"    Решающий критерий: {verdict.decisive_criterion}")
                     print(
                         f"    Наблюдение ({verdict.evidence_turn_id}): "
                         f"«{verdict.evidence_quote}» — {verdict.observation}"

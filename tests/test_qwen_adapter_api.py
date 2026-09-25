@@ -97,15 +97,25 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "director-only-marker" not in request.content.decode()
             assert "attack-marker" not in request.content.decode()
             assert "Спросить, как восстановить доверие." not in request.content.decode()
+            assert "decisive_criterion" in system
+            assert "не длиннее 120 слов" in system
+            assert "Не давай советов" in system
             return completion(
                 {
                     "college": context["college"],
                     "choice": "player",
+                    "decisive_criterion": {
+                        "hiring": "Надёжность",
+                        "negotiation": "Движение к цели",
+                        "ownership": "Управление рисками",
+                    }[context["college"]],
                     "evidence_turn_id": "turn-1",
                     "evidence_quote": "Как восстановить доверие?",
                     "observation": "Менеджер задал вопрос о доверии.",
                     "effect": "Директор получил возможность уточнить ожидания.",
-                    "comparison": "Директор пока только запросил условия.",
+                    "comparison": (
+                        "Менеджер спросил о доверии, а директор пока лишь запросил условия."
+                    ),
                 }
             )
         if role == "[ARENA_TRAINER]":

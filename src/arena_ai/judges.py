@@ -1,5 +1,6 @@
 """Three isolated judge calls over the same public duel view."""
 
+import re
 from functools import partial
 from typing import Protocol
 
@@ -32,6 +33,47 @@ RUBRICS: dict[JudgeCollege, str] = {
         "Оцени качество решений, компетентность, ответственность, риски и последствия для ресурсов."
     ),
 }
+CRITERIA: dict[JudgeCollege, tuple[str, ...]] = {
+    "hiring": (
+        "Надёжность",
+        "Отношение к людям",
+        "Управленческая твёрдость",
+        "Забота о команде",
+        "Долгосрочные последствия управления",
+    ),
+    "negotiation": (
+        "Движение к цели",
+        "Управление другой стороной",
+        "Работа с картиной мира",
+        "Управление ролями",
+        "Сохранение отношений",
+    ),
+    "ownership": (
+        "Качество решений",
+        "Компетентность",
+        "Ответственность",
+        "Управление рисками",
+        "Последствия для ресурсов",
+    ),
+}
+MAX_VERDICT_WORDS = 120
+SOURCE_REFERENCE = re.compile(
+    r"https?://|www\.|\b(?:методич\w*|источник\w*|страниц\w*|стр\.\s*\d+|"
+    r"rag|qdrant|doi|pdf|methodology|retrieval|source|page|citation)\b",
+    re.IGNORECASE,
+)
+COACHING_LANGUAGE = re.compile(
+    r"\b(?:рекоменд\w*|советую|попроб\w*|в следующий раз|"
+    r"(?:вам|тебе|ему|ей) стоит)\b",
+    re.IGNORECASE,
+)
+GENERIC_COMMENT = re.compile(
+    r"\b(?:нужен вызов (?:реальной )?модели|недостаточно данных для оценки|"
+    r"невозможно (?:сделать|дать) вывод|оба участника были уверены|"
+    r"был более уверенным|был более красноречивым|хороший ход|"
+    r"вс[её] стало лучше|первый лучше второго)\b",
+    re.IGNORECASE,
+)
 
 
 class Judge(Protocol):
@@ -46,23 +88,52 @@ class DemoJudge:
         return {
             "college": context.college,
             "choice": "player" if context.college == "negotiation" else "opponent",
+            "decisive_criterion": {
+                "hiring": "Надёжность",
+                "negotiation": "Движение к цели",
+                "ownership": "Управление рисками",
+            }[context.college],
             "evidence_turn_id": evidence.turn_id,
             "evidence_quote": evidence.text[:120],
-            "observation": "Участник сформулировал позицию в зафиксированном ходе.",
-            "effect": "Это задало направление дальнейшего разговора.",
-            "comparison": "Для содержательной оценки нужен вызов реальной модели.",
+            "observation": "В принятом ходе участник сформулировал свою позицию.",
+            "effect": "Реплика стала частью обсуждения между участниками.",
+            "comparison": "В деморежиме выбор условный: действия сторон не оценены моделью.",
         }
 
 
 def verdict_is_grounded(verdict: JudgeVerdict, context: JudgeContext, case: CaseConfig) -> bool:
     if verdict.college != context.college:
         return False
+    if verdict.decisive_criterion not in CRITERIA[context.college]:
+        return False
+    if (
+        not verdict.evidence_turn_id.strip()
+        or not any(character.isalnum() for character in verdict.evidence_quote)
+        or any(
+            not text.strip() for text in (verdict.observation, verdict.effect, verdict.comparison)
+        )
+    ):
+        return False
     if not any(
-        entry.turn_id == verdict.evidence_turn_id and verdict.evidence_quote in entry.text
+        entry.status == "accepted"
+        and entry.turn_id == verdict.evidence_turn_id
+        and verdict.evidence_quote in entry.text
         for entry in context.transcript
     ):
         return False
-    visible_text = f"{verdict.evidence_quote} {verdict.observation} {verdict.effect} {verdict.comparison}"
+    visible_text = (
+        f"{verdict.decisive_criterion} {verdict.evidence_quote} {verdict.observation} "
+        f"{verdict.effect} {verdict.comparison}"
+    )
+    reasoning_text = f"{verdict.observation} {verdict.effect} {verdict.comparison}"
+    if len(visible_text.split()) > MAX_VERDICT_WORDS:
+        return False
+    if (
+        SOURCE_REFERENCE.search(visible_text)
+        or COACHING_LANGUAGE.search(reasoning_text)
+        or GENERIC_COMMENT.search(reasoning_text)
+    ):
+        return False
     return not contains_private_phrase(visible_text, case)
 
 

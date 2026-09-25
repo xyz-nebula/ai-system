@@ -75,6 +75,32 @@ def test_preparation_finish_example_matches_public_contracts() -> None:
     assert request.preparation.negotiation_goal == "Согласовать измеримые условия повышения."
     assert cli_card == request.preparation
     assert response.session_id == request.snapshot.session_id
+    assert len(response.judge_verdicts) == 3
+    assert {slot.college for slot in response.judge_verdicts} == {
+        "hiring",
+        "negotiation",
+        "ownership",
+    }
+    assert (
+        len({slot.verdict.decisive_criterion for slot in response.judge_verdicts if slot.verdict})
+        == 3
+    )
+    for slot in response.judge_verdicts:
+        assert slot.status == "ready"
+        assert slot.verdict is not None
+        verdict = slot.verdict
+        assert any(
+            entry.status == "accepted"
+            and entry.turn_id == verdict.evidence_turn_id
+            and verdict.evidence_quote in entry.text
+            for entry in request.snapshot.transcript
+        )
+        comment = (
+            f"{verdict.decisive_criterion} {verdict.evidence_quote} {verdict.observation} "
+            f"{verdict.effect} {verdict.comparison}"
+        )
+        assert len(comment.split()) <= 120
+        assert "[REDACTED:" not in comment
     assert response.trainer_feedback.feedback is not None
     comparison = response.trainer_feedback.feedback.plan_vs_reality
     assert comparison is not None

@@ -76,7 +76,23 @@ class RecordingClient:
             json={
                 "session_id": "cli-preparation",
                 "outcome": {"kind": "no_agreement", "summary": "Соглашения пока нет."},
-                "judge_verdicts": [],
+                "judge_verdicts": [
+                    {
+                        "college": "negotiation",
+                        "status": "ready",
+                        "verdict": {
+                            "college": "negotiation",
+                            "choice": "player",
+                            "decisive_criterion": "Движение к цели",
+                            "evidence_turn_id": "turn-1",
+                            "evidence_quote": "обсудить KPI",
+                            "observation": "Менеджер поднял тему измеримых условий.",
+                            "effect": "Критерии вошли в обсуждение повышения.",
+                            "comparison": "Менеджер предложил тему, а директор только запросил условия.",
+                        },
+                        "error_code": None,
+                    }
+                ],
                 "trainer_feedback": {
                     "status": "ready",
                     "feedback": {
@@ -140,6 +156,8 @@ def test_cli_loads_preparation_for_finish_and_prints_the_comparison(
     assert "Сопоставление подготовки с поединком:" in output
     assert "Адаптировано" in output
     assert "обсудить KPI" in output
+    assert "Решающий критерий: Движение к цели" in output
+    assert "Выбор: Менеджер" in output
 
 
 def test_cli_rejects_invalid_preparation_before_connecting(

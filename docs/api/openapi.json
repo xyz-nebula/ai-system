@@ -393,6 +393,26 @@
         ],
         "type": "string"
       },
+      "JudgeCriterion": {
+        "enum": [
+          "Надёжность",
+          "Отношение к людям",
+          "Управленческая твёрдость",
+          "Забота о команде",
+          "Долгосрочные последствия управления",
+          "Движение к цели",
+          "Управление другой стороной",
+          "Работа с картиной мира",
+          "Управление ролями",
+          "Сохранение отношений",
+          "Качество решений",
+          "Компетентность",
+          "Ответственность",
+          "Управление рисками",
+          "Последствия для ресурсов"
+        ],
+        "type": "string"
+      },
       "JudgeSlot": {
         "additionalProperties": false,
         "properties": {
@@ -459,6 +479,10 @@
             "title": "Comparison",
             "type": "string"
           },
+          "decisive_criterion": {
+            "$ref": "#/components/schemas/JudgeCriterion",
+            "description": "One decisive criterion of this college"
+          },
           "effect": {
             "minLength": 1,
             "title": "Effect",
@@ -482,6 +506,7 @@
         "required": [
           "college",
           "choice",
+          "decisive_criterion",
           "evidence_turn_id",
           "evidence_quote",
           "observation",

@@ -8,7 +8,8 @@
   позиции с вымышленными ID. Поля `opponent_strategy` и `opponent_progress` нельзя передавать в
   пользовательский интерфейс.
 - `examples/preparation-card.json` — минимальная локальная карточка для `arena-ai --preparation-file`.
-- `examples/preparation-finish.json` — полный пример `POST /v1/finish` с карточкой и проверяемым `plan_vs_reality`.
+- `examples/preparation-finish.json` — полный пример `POST /v1/finish` с карточкой,
+  тремя короткими судейскими вердиктами и проверяемым `plan_vs_reality`.
 
 В файле примеров `case` вынесен наверх, чтобы не повторять его пять раз. Полное тело каждого запроса собирается по правилу `{"case": <top-level case>, ...scenario.request.body}`; это же правило проверяют artifact- и black-box тесты.
 

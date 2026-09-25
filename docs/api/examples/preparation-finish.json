@@ -48,7 +48,53 @@
         "kind": "no_agreement",
         "summary": "Условия повышения обсуждены, но соглашение ещё не достигнуто."
       },
-      "judge_verdicts": [],
+      "judge_verdicts": [
+        {
+          "college": "hiring",
+          "status": "ready",
+          "verdict": {
+            "college": "hiring",
+            "choice": "opponent",
+            "decisive_criterion": "Надёжность",
+            "evidence_turn_id": "turn-1",
+            "evidence_quote": "Готов компенсировать пропуск",
+            "observation": "Менеджер признал пропуск и предложил компенсацию.",
+            "effect": "Обязательство пока осталось без срока и проверки.",
+            "comparison": "Директор запросил условия, а менеджер не сделал обещание проверяемым."
+          },
+          "error_code": null
+        },
+        {
+          "college": "negotiation",
+          "status": "ready",
+          "verdict": {
+            "college": "negotiation",
+            "choice": "player",
+            "decisive_criterion": "Движение к цели",
+            "evidence_turn_id": "turn-1",
+            "evidence_quote": "обсудить KPI",
+            "observation": "Менеджер перевёл разговор к измеримым условиям.",
+            "effect": "Директор запросил конкретное предложение по этим условиям.",
+            "comparison": "Менеджер продвинул цель, а директор пока только уточнил условия."
+          },
+          "error_code": null
+        },
+        {
+          "college": "ownership",
+          "status": "ready",
+          "verdict": {
+            "college": "ownership",
+            "choice": "opponent",
+            "decisive_criterion": "Управление рисками",
+            "evidence_turn_id": "turn-1",
+            "evidence_quote": "Готов компенсировать пропуск",
+            "observation": "Менеджер предложил компенсацию без механизма контроля.",
+            "effect": "Риск повторного срыва пока не получил проверяемой меры.",
+            "comparison": "Директор запросил условия, а менеджер не предложил способ снизить риск."
+          },
+          "error_code": null
+        }
+      ],
       "trainer_feedback": {
         "status": "ready",
         "feedback": {

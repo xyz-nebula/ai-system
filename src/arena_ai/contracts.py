@@ -19,6 +19,23 @@ type ModelErrorCode = Literal[
     "opponent_unearned_concession",
 ]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
+type JudgeCriterion = Literal[
+    "Надёжность",
+    "Отношение к людям",
+    "Управленческая твёрдость",
+    "Забота о команде",
+    "Долгосрочные последствия управления",
+    "Движение к цели",
+    "Управление другой стороной",
+    "Работа с картиной мира",
+    "Управление ролями",
+    "Сохранение отношений",
+    "Качество решений",
+    "Компетентность",
+    "Ответственность",
+    "Управление рисками",
+    "Последствия для ресурсов",
+]
 type GuardReason = Literal[
     "prompt_override",
     "private_data_request",
@@ -422,6 +439,7 @@ class JudgeContext(Contract):
 class JudgeVerdict(Contract):
     college: JudgeCollege
     choice: Literal["player", "opponent"]
+    decisive_criterion: JudgeCriterion = Field(description="One decisive criterion of this college")
     evidence_turn_id: str
     evidence_quote: str = Field(min_length=1)
     observation: str = Field(min_length=1)

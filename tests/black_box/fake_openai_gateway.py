@@ -111,13 +111,20 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
                 completion = {
                     "college": context["college"],
                     "choice": "player",
+                    "decisive_criterion": {
+                        "hiring": "Надёжность",
+                        "negotiation": "Движение к цели",
+                        "ownership": "Управление рисками",
+                    }[context["college"]],
                     "evidence_turn_id": evidence["turn_id"],
                     "evidence_quote": evidence["text"],
                     "observation": (
                         "Менеджер признал сомнения и предложил измеримую ответственность."
                     ),
                     "effect": "Разговор перешёл к проверяемым условиям.",
-                    "comparison": "Менеджер дал более конкретное предложение.",
+                    "comparison": (
+                        "Менеджер предложил проверяемые условия, а директор пока лишь запросил их."
+                    ),
                 }
         elif system.startswith("[ARENA_TRAINER]"):
             if model == FAILURE_MODEL_ID:
