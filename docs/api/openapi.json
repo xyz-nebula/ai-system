@@ -357,7 +357,8 @@
         "enum": [
           "prompt_override",
           "private_data_request",
-          "hidden_position_request"
+          "hidden_position_request",
+          "physical_harm_threat"
         ],
         "type": "string"
       },
@@ -512,7 +513,10 @@
           "guard_uncertain",
           "validator_unavailable",
           "invalid_validator_output",
-          "validator_uncertain"
+          "validator_uncertain",
+          "opponent_role_break",
+          "opponent_premature_ending",
+          "opponent_unearned_concession"
         ],
         "type": "string"
       },

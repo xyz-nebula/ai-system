@@ -56,6 +56,8 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
         if role == "[ARENA_GUARD]":
             assert "manager-only-marker" not in request.content.decode()
             assert "director-only-marker" not in request.content.decode()
+            assert "сценарная угроза бизнесу" in system
+            assert "physical_harm_threat" in system
             return completion({"decision": "allow", "reason": None})
         if role == "[ARENA_OPPONENT]":
             assert "manager-only-marker" not in request.content.decode()
@@ -81,8 +83,11 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "маркер из direct_commitment_markers" in system
             assert "из каждой evidence_groups" in system
             assert "Не раскрывай идентификаторы ступеней" in system
+            assert "не объявляй разговор или раунд завершённым" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
+            assert "premature_ending" in system
+            assert "unearned_concession" in system
             return completion({"decision": "accept"})
         if role == "[ARENA_JUDGE]":
             context = json.loads(body["messages"][1]["content"])

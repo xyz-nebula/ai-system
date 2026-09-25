@@ -37,15 +37,28 @@ from arena_ai.contracts import (
     TurnResponse,
     ValidationContext,
     ValidationDecision,
+    ValidatorRejectReason,
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
-from arena_ai.opponent_position import apply_position_transition
+from arena_ai.opponent_position import UnearnedConcessionError, apply_position_transition
 from arena_ai.outcome import determine_outcome
-from arena_ai.privacy import contains_private_phrase, public_duel_view, public_transcript
+from arena_ai.privacy import (
+    contains_private_phrase,
+    public_duel_view,
+    public_transcript,
+    visible_proposal_text,
+)
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
 
 SERVICE_BEARER = HTTPBearer(auto_error=False)
+VALIDATION_ERROR_CODES: dict[ValidatorRejectReason, ModelErrorCode] = {
+    "role_break": "opponent_role_break",
+    "premature_ending": "opponent_premature_ending",
+    "unearned_concession": "opponent_unearned_concession",
+    "private_data_leak": "invalid_opponent_output",
+    "factual_conflict": "invalid_opponent_output",
+}
 
 
 class Opponent(Protocol):
@@ -89,6 +102,69 @@ def guard_reason(text: str) -> GuardReason | None:
         return "private_data_request"
     if re.search(r"переговорн\w*\s+минимум", lowered) or "batna" in lowered:
         return "hidden_position_request"
+    if contains_unambiguous_physical_threat(lowered):
+        return "physical_harm_threat"
+    return None
+
+
+def contains_unambiguous_physical_threat(text: str) -> bool:
+    unquoted = re.sub(
+        r"«[^»]*»|“[^”]*”|\"[^\"\n]*\"|'[^'\n]*'",
+        " ",
+        text.casefold(),
+    )
+    threat_patterns = (
+        re.compile(
+            r"\b(?P<verb>убью|зарежу|застрелю|изобью|покалечу|ударю)\s+"
+            r"(?:тебя|вас|его|её)\b"
+        ),
+        re.compile(
+            r"\b(?:тебя|вас|его|её)(?:\s+\w+){0,3}\s+"
+            r"(?P<verb>убью|зарежу|застрелю|изобью|покалечу|ударю)\b"
+        ),
+        re.compile(
+            r"\b(?P<verb>сломаю)\s+(?:тебе|вам|ему|ей)\s+"
+            r"(?:ноги|руки|шею)\b"
+        ),
+        re.compile(
+            r"\b(?:тебе|вам|ему|ей)\s+(?:ноги|руки|шею)(?:\s+\w+){0,2}\s+"
+            r"(?P<verb>сломаю)\b"
+        ),
+    )
+    for pattern in threat_patterns:
+        for match in pattern.finditer(unquoted):
+            if match.group("verb") == "ударю" and re.search(
+                r"\b(?:результатами|показателями|цифрами|аргументами)\b",
+                unquoted[match.start() : match.end() + 32],
+            ):
+                continue
+            prefix = unquoted[max(0, match.start("verb") - 40) : match.start("verb")]
+            if not re.search(r"\bне\s*$", prefix):
+                return True
+    return False
+
+
+def opponent_role_rejection_reason(text: str) -> ValidatorRejectReason | None:
+    lowered = text.casefold()
+    if re.search(
+        r"(?:разговор|обсуждение|диалог)\s+(?:окончен|закончен|заверш[её]н)|"
+        r"\bя\s+больше\s+не\s+буду\s+продолжать\b|"
+        r"\bна\s+этом\s+(?:разговор|обсуждение)\s+(?:окончен|закончено)\b",
+        lowered,
+    ):
+        return "premature_ending"
+    if re.search(
+        r"\b(?:нахуй|пош[её]л\s+на\s+хуй|придурок|идиот|мудак|дебил)\b",
+        lowered,
+    ):
+        return "role_break"
+    if re.search(
+        r"\bне\s+могу\s+продолжать.{0,50}(?:тоне|оскорб)|"
+        r"\b(?:общайтесь|говорите)\s+уважительно\b|"
+        r"\bоскорблени\w*\s+(?:недопустим|неприемлем)\w*",
+        lowered,
+    ):
+        return "role_break"
     return None
 
 
@@ -108,28 +184,7 @@ def valid_proposal(
     ):
         return False
     resolution = proposal.resolution
-    visible_text = " ".join(
-        [
-            proposal.text,
-            *(resolution.employee_commitments if isinstance(resolution, AgreementResolution) else []),
-            *(resolution.director_commitments if isinstance(resolution, AgreementResolution) else []),
-            *(
-                resolution.commitments
-                if isinstance(resolution, PartialDecision)
-                else []
-            ),
-            *(
-                resolution.open_points
-                if isinstance(resolution, PartialDecision)
-                else []
-            ),
-            *(
-                [resolution.reason, resolution.next_step]
-                if isinstance(resolution, DeferredDecision)
-                else []
-            ),
-        ]
-    )
+    visible_text = visible_proposal_text(proposal)
     if contains_private_phrase(visible_text, case):
         return False
     if isinstance(resolution, PartialDecision):
@@ -203,7 +258,11 @@ def model_failure_response(request: TurnRequest, code: ModelErrorCode) -> TurnRe
 
 
 def blocked_turn_response(request: TurnRequest, reason: GuardReason) -> TurnResponse:
-    safe_text = "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
+    safe_text = (
+        "Угрозы физической расправы недопустимы. Вернитесь к безопасному деловому разговору."
+        if reason == "physical_harm_threat"
+        else "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
+    )
     snapshot = SessionSnapshot(
         session_id=request.snapshot.session_id,
         state=request.snapshot.state.model_copy(
@@ -371,12 +430,20 @@ def create_app(
             transcript=public_transcript(request.snapshot.transcript),
             user_text=request.user_text,
         )
+        last_proposal_error: ModelErrorCode = "invalid_opponent_output"
+
         def validated_proposal(
             raw: object,
         ) -> tuple[OpponentProposal, OpponentPositionProgress | None] | None:
+            nonlocal last_proposal_error
             try:
                 proposal = OpponentProposal.model_validate(raw)
             except ValueError:
+                last_proposal_error = "invalid_opponent_output"
+                return None
+            role_reason = opponent_role_rejection_reason(visible_proposal_text(proposal))
+            if role_reason is not None:
+                last_proposal_error = VALIDATION_ERROR_CODES[role_reason]
                 return None
             if not valid_proposal(
                 proposal,
@@ -384,6 +451,7 @@ def create_app(
                 request.user_text,
                 request.snapshot.transcript,
             ):
+                last_proposal_error = "invalid_opponent_output"
                 return None
             try:
                 opponent_progress = apply_position_transition(
@@ -394,58 +462,75 @@ def create_app(
                     turn_id=request.turn_id,
                     transcript=request.snapshot.transcript,
                 )
+            except UnearnedConcessionError:
+                last_proposal_error = "opponent_unearned_concession"
+                return None
             except ValueError:
+                last_proposal_error = "invalid_opponent_output"
                 return None
             return proposal, opponent_progress
 
-        proposal_result = await validated_model_call(
-            lambda: active_opponent.respond(context),
-            validated_proposal,
-            attempts=model_attempts,
-        )
-        if proposal_result.value is None:
-            return model_failure_response(
-                request,
-                (
+        def validated_validation(raw: object) -> ValidationDecision | None:
+            try:
+                return ValidationDecision.model_validate(raw)
+            except ValueError:
+                return None
+
+        proposal: OpponentProposal | None = None
+        opponent_progress: OpponentPositionProgress | None = None
+        attempt_error: ModelErrorCode = "invalid_opponent_output"
+        for _ in range(model_attempts):
+            proposal_result = await validated_model_call(
+                lambda: active_opponent.respond(context),
+                validated_proposal,
+                attempts=1,
+            )
+            if proposal_result.value is None:
+                attempt_error = (
                     "opponent_unavailable"
                     if proposal_result.failure == "unavailable"
-                    else "invalid_opponent_output"
-                ),
-            )
-        proposal, opponent_progress = proposal_result.value
-        if validator is not None:
-            validation_context = ValidationContext(
-                case=request.case,
-                state=request.snapshot.state,
-                transcript=public_transcript(request.snapshot.transcript),
-                user_text=request.user_text,
-                proposal=proposal,
-            )
-            def validated_validation(raw: object) -> ValidationDecision | None:
-                try:
-                    return ValidationDecision.model_validate(raw)
-                except ValueError:
-                    return None
+                    else last_proposal_error
+                )
+                continue
 
-            validation_result = await validated_model_call(
-                lambda: validator.assess(validation_context),
-                validated_validation,
-                attempts=model_attempts,
-            )
-            if validation_result.value is None:
-                return model_failure_response(
-                    request,
-                    (
+            candidate, candidate_progress = proposal_result.value
+            if validator is not None:
+                validation_context = ValidationContext(
+                    case=request.case,
+                    state=request.snapshot.state,
+                    transcript=public_transcript(request.snapshot.transcript),
+                    user_text=request.user_text,
+                    proposal=candidate,
+                )
+                validation_result = await validated_model_call(
+                    lambda validation_context=validation_context: validator.assess(
+                        validation_context
+                    ),
+                    validated_validation,
+                    attempts=1,
+                )
+                if validation_result.value is None:
+                    attempt_error = (
                         "validator_unavailable"
                         if validation_result.failure == "unavailable"
                         else "invalid_validator_output"
-                    ),
-                )
-            validation = validation_result.value
-            if validation.decision == "uncertain":
-                return model_failure_response(request, "validator_uncertain")
-            if validation.decision == "reject":
-                return model_failure_response(request, "invalid_opponent_output")
+                    )
+                    continue
+                validation = validation_result.value
+                if validation.decision == "uncertain":
+                    attempt_error = "validator_uncertain"
+                    continue
+                if validation.decision == "reject":
+                    assert validation.reason is not None
+                    attempt_error = VALIDATION_ERROR_CODES[validation.reason]
+                    continue
+
+            proposal = candidate
+            opponent_progress = candidate_progress
+            break
+
+        if proposal is None:
+            return model_failure_response(request, attempt_error)
         resolution = proposal.resolution
         agreement = (
             resolution.as_deal_terms()

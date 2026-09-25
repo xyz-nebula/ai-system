@@ -14,9 +14,24 @@ type ModelErrorCode = Literal[
     "validator_unavailable",
     "invalid_validator_output",
     "validator_uncertain",
+    "opponent_role_break",
+    "opponent_premature_ending",
+    "opponent_unearned_concession",
 ]
 type JudgeCollege = Literal["hiring", "negotiation", "ownership"]
-type GuardReason = Literal["prompt_override", "private_data_request", "hidden_position_request"]
+type GuardReason = Literal[
+    "prompt_override",
+    "private_data_request",
+    "hidden_position_request",
+    "physical_harm_threat",
+]
+type ValidatorRejectReason = Literal[
+    "role_break",
+    "premature_ending",
+    "unearned_concession",
+    "private_data_leak",
+    "factual_conflict",
+]
 type PreparationItemKind = Literal[
     "situation_analysis",
     "strategic_goal",
@@ -376,6 +391,13 @@ class ValidationContext(Contract):
 
 class ValidationDecision(Contract):
     decision: Literal["accept", "reject", "uncertain"]
+    reason: ValidatorRejectReason | None = None
+
+    @model_validator(mode="after")
+    def reason_matches_decision(self) -> Self:
+        if (self.decision == "reject") != (self.reason is not None):
+            raise ValueError("rejected validation requires a reason only when rejected")
+        return self
 
 
 class JudgeContext(Contract):

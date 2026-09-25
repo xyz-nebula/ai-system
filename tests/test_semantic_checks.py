@@ -36,7 +36,10 @@ class RecordingValidator:
 
     async def assess(self, context: ValidationContext) -> object:
         self.contexts.append(context)
-        return {"decision": self.decision}
+        return {
+            "decision": self.decision,
+            "reason": "factual_conflict" if self.decision == "reject" else None,
+        }
 
 
 class SimpleOpponent:
@@ -113,7 +116,8 @@ async def test_semantic_validator_rejects_proposal_before_snapshot_update() -> N
 
     assert response.status_code == 200
     result = response.json()
-    assert len(validator.contexts) == 1
+    assert len(validator.contexts) == 2
+    assert all(context.state.turn_count == 0 for context in validator.contexts)
     assert result["status"] == "model_error"
     assert result["error_code"] == "invalid_opponent_output"
     assert result["snapshot"]["transcript"] == []

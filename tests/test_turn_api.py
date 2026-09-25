@@ -272,7 +272,7 @@ async def test_opponent_cannot_skip_directly_to_red_line_position() -> None:
     assert response.status_code == 200
     result = response.json()
     assert result["status"] == "model_error"
-    assert result["error_code"] == "invalid_opponent_output"
+    assert result["error_code"] == "opponent_unearned_concession"
     assert result["snapshot"] == {
         "session_id": "skipped-position",
         "state": {"turn_count": 0, "stage": "negotiating"},

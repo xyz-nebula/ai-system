@@ -14,6 +14,11 @@ from arena_ai.contracts import (
     PartialDecision,
     TranscriptEntry,
 )
+from arena_ai.privacy import visible_proposal_text
+
+
+class UnearnedConcessionError(ValueError):
+    """The proposed public position improves without earned transition evidence."""
 
 
 def apply_position_transition(
@@ -33,7 +38,7 @@ def apply_position_transition(
             raise ValueError("position progress requires a configured strategy")
         return None
 
-    visible_text = _visible_proposal_text(proposal).casefold()
+    visible_text = visible_proposal_text(proposal).casefold()
     private_strategy_phrases = {
         step.id.casefold() for step in strategy.steps
     } | {
@@ -107,18 +112,24 @@ def apply_position_transition(
         )
 
     if current_index + 1 >= len(strategy.steps):
-        raise ValueError("red-line position cannot concede further")
+        raise UnearnedConcessionError("red-line position cannot concede further")
     target = strategy.steps[current_index + 1]
     if transition.to_step_id != target.id:
-        raise ValueError("position transition must advance exactly one step")
+        raise UnearnedConcessionError("position transition must advance exactly one step")
 
     required_ids = [item.id for item in target.requires]
     if transition.requirement_ids != required_ids:
-        raise ValueError("position transition must satisfy the target requirements")
+        raise UnearnedConcessionError(
+            "position transition must satisfy the target requirements"
+        )
     if set(required_ids) & set(satisfied_ids):
-        raise ValueError("position transition needs new concession requirements")
+        raise UnearnedConcessionError(
+            "position transition needs new concession requirements"
+        )
     if transition.evidence_quote.strip() != user_text.strip():
-        raise ValueError("position transition evidence must quote the full current user turn")
+        raise UnearnedConcessionError(
+            "position transition evidence must quote the full current user turn"
+        )
     evidence = transition.evidence_quote.casefold()
     if re.search(
         r"\bне\s+(?:\d+|один|одн(?:а|у|ой)?|две|три|четыре|семь|"
@@ -127,30 +138,42 @@ def apply_position_transition(
         r"(?:день|дня|дней|недел\w*|месяц\w*)",
         evidence,
     ):
-        raise ValueError("negated terms cannot justify a position transition")
+        raise UnearnedConcessionError(
+            "negated terms cannot justify a position transition"
+        )
     if not _mentions_control_period_and_kpi(
         evidence,
         target.terms.control_weeks,
         target.terms.kpi_percent,
     ):
-        raise ValueError("position transition evidence must state the target terms")
+        raise UnearnedConcessionError(
+            "position transition evidence must state the target terms"
+        )
     if target.terms.automatic_raise and _stated_automatic_raise(evidence) is not True:
-        raise ValueError("position transition evidence must state the automatic raise")
+        raise UnearnedConcessionError(
+            "position transition evidence must state the automatic raise"
+        )
     for requirement in target.requires:
         if not _requirement_is_satisfied(evidence, requirement):
-            raise ValueError("position transition evidence does not prove the requirement")
+            raise UnearnedConcessionError(
+                "position transition evidence does not prove the requirement"
+            )
         if any(
             entry.speaker == "player"
             and entry.status == "accepted"
             and _requirement_is_satisfied(entry.text.casefold(), requirement)
             for entry in transcript
         ):
-            raise ValueError("position transition requires a newly observed commitment")
-    visible_text = _visible_proposal_text(proposal)
+            raise UnearnedConcessionError(
+                "position transition requires a newly observed commitment"
+            )
+    visible_text = visible_proposal_text(proposal)
     if _contains_conditional_commitment(visible_text):
-        raise ValueError("position transition response cannot add a new condition")
+        raise UnearnedConcessionError(
+            "position transition response cannot add a new condition"
+        )
     if isinstance(proposal.resolution, (PartialDecision, DeferredDecision)):
-        raise ValueError(  # noqa: TRY004 - invalid domain combination, not caller type misuse
+        raise UnearnedConcessionError(
             "position transition cannot carry a partial or deferred decision"
         )
     if not _mentions_control_period_and_kpi(
@@ -158,16 +181,22 @@ def apply_position_transition(
         target.terms.control_weeks,
         target.terms.kpi_percent,
     ):
-        raise ValueError("position transition response must state the new terms")
+        raise UnearnedConcessionError(
+            "position transition response must state the new terms"
+        )
     if target.terms.automatic_raise and _stated_automatic_raise(visible_text) is not True:
-        raise ValueError("position transition must state the automatic raise")
+        raise UnearnedConcessionError(
+            "position transition must state the automatic raise"
+        )
 
     resolution = proposal.resolution
     if isinstance(resolution, AgreementResolution) and not _same_deal_terms(
         resolution,
         target.terms,
     ):
-        raise ValueError("agreement and position transition terms disagree")
+        raise UnearnedConcessionError(
+            "agreement and position transition terms disagree"
+        )
 
     return OpponentPositionProgress(
         current_step_id=target.id,
@@ -188,24 +217,34 @@ def _reject_untracked_terms(current_terms: DealTerms, proposal: OpponentProposal
         resolution,
         current_terms,
     ):
-        raise ValueError("agreement terms require a validated position transition")
+        raise UnearnedConcessionError(
+            "agreement terms require a validated position transition"
+        )
 
-    visible_text = _visible_proposal_text(proposal)
+    visible_text = visible_proposal_text(proposal)
     if _contains_conditional_commitment(visible_text):
-        raise ValueError("position response cannot add a conditional commitment")
+        raise UnearnedConcessionError(
+            "position response cannot add a conditional commitment"
+        )
     stated_terms = _extract_control_days_and_kpis(visible_text)
     if stated_terms is None:
         if _contains_position_term_signal(visible_text):
-            raise ValueError("position terms must be explicit and machine-checkable")
+            raise UnearnedConcessionError(
+                "position terms must be explicit and machine-checkable"
+            )
         return
     stated_control_days, stated_kpis = stated_terms
     if stated_control_days != {current_terms.control_weeks * 7} or stated_kpis != {
         current_terms.kpi_percent
     }:
-        raise ValueError("new position terms require a validated transition")
+        raise UnearnedConcessionError(
+            "new position terms require a validated transition"
+        )
     stated_automatic_raise = _stated_automatic_raise(visible_text)
     if stated_automatic_raise is None or stated_automatic_raise != current_terms.automatic_raise:
-        raise ValueError("automatic-raise terms require a validated transition")
+        raise UnearnedConcessionError(
+            "automatic-raise terms require a validated transition"
+        )
 
 
 def _same_deal_terms(left: DealTerms, right: DealTerms) -> bool:
@@ -369,17 +408,3 @@ def _contains_conditional_commitment(text: str) -> bool:
         r"при\s+(?:передач|предоставлен|отказ|уступк|обязательств))\w*",
         lowered,
     ) is not None
-
-
-def _visible_proposal_text(proposal: OpponentProposal) -> str:
-    resolution = proposal.resolution
-    parts = [proposal.text]
-    if isinstance(resolution, AgreementResolution):
-        parts.extend(resolution.employee_commitments)
-        parts.extend(resolution.director_commitments)
-    elif isinstance(resolution, PartialDecision):
-        parts.extend(resolution.commitments)
-        parts.extend(resolution.open_points)
-    elif isinstance(resolution, DeferredDecision):
-        parts.extend((resolution.reason, resolution.next_step))
-    return " ".join(parts)
