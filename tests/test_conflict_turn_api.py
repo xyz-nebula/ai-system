@@ -186,6 +186,19 @@ async def test_negation_quote_and_business_metaphor_are_not_physical_threats(
             "opponent_role_break",
         ),
         ("Разговор окончен. Я больше не буду продолжать.", "opponent_premature_ending"),
+        ("Раунд завершён.", "opponent_premature_ending"),
+        ("Поединок закончен.", "opponent_premature_ending"),
+        ("Я завершаю раунд.", "opponent_premature_ending"),
+        ("На этом поединок завершаю.", "opponent_premature_ending"),
+        ("Я закончил переговоры.", "opponent_premature_ending"),
+        ("Переговоры завершены.", "opponent_premature_ending"),
+        ("На этом переговоры окончены.", "opponent_premature_ending"),
+        ("Я прекращаю переговоры.", "opponent_premature_ending"),
+        ("Я прекращаю разговор.", "opponent_premature_ending"),
+        ("Разговор прекращён.", "opponent_premature_ending"),
+        ("Переговоры прекращаются.", "opponent_premature_ending"),
+        ("Я прекращаю эти переговоры.", "opponent_premature_ending"),
+        ("Я завершаю наш разговор.", "opponent_premature_ending"),
     ],
 )
 async def test_role_breaking_opponent_output_is_rejected_with_reason(
@@ -244,9 +257,7 @@ async def test_role_break_in_structured_public_decision_is_rejected() -> None:
 @pytest.mark.anyio
 async def test_unearned_concession_has_diagnostic_error_and_preserves_snapshot() -> None:
     app = create_app(
-        opponent=RawOpponent(
-            {"text": "Готов на 1 неделю, KPI 100% и автоматическое повышение."}
-        )
+        opponent=RawOpponent({"text": "Готов на 1 неделю, KPI 100% и автоматическое повышение."})
     )
     response = await post_turn(
         app,
@@ -326,9 +337,7 @@ async def test_semantically_rejected_proposal_regenerates_opponent_output() -> N
     assert response.status_code == 200
     result = response.json()
     assert result["status"] == "accepted"
-    assert result["opponent_text"] == (
-        "Давление позицию не меняет. Вернёмся к деловым условиям."
-    )
+    assert result["opponent_text"] == ("Давление позицию не меняет. Вернёмся к деловым условиям.")
     assert result["snapshot"]["state"]["turn_count"] == 1
 
 

@@ -13,6 +13,8 @@
     "Content-Type": "application/json"
   },
   "request_body_rule": "Send the top-level case together with every scenario.request.body: {case, ...body}.",
+  "round_lifecycle_rule": "A stored agreement is the current factual result, not a closed round. Backend may keep sending turns until it explicitly calls /v1/finish.",
+  "round_timer_rule": "Backend and Frontend own the five-minute timer and finish button. AI-service network timeouts are request limits, not the round timer.",
   "scenarios": {
     "accepted": {
       "request": {
@@ -145,13 +147,13 @@
         }
       }
     },
-    "state_conflict": {
+    "agreement_continues": {
       "request": {
         "method": "POST",
         "path": "/v1/turn",
         "body": {
           "snapshot": {
-            "session_id": "example-finished",
+            "session_id": "example-agreement-continues",
             "state": {
               "turn_count": 1,
               "stage": "agreed",
@@ -187,9 +189,56 @@
         }
       },
       "response": {
-        "status_code": 409,
+        "status_code": 200,
         "body": {
-          "detail": "Duel already has a decision"
+          "session_id": "example-agreement-continues",
+          "turn_id": "turn-2",
+          "status": "accepted",
+          "opponent_text": "Давайте согласуем измеримые условия.",
+          "snapshot": {
+            "session_id": "example-agreement-continues",
+            "state": {
+              "turn_count": 2,
+              "stage": "agreed",
+              "agreement": {
+                "control_weeks": 1,
+                "kpi_percent": 120,
+                "automatic_raise": true,
+                "employee_commitments": [
+                  "Компенсировать пропущенный день"
+                ],
+                "director_commitments": [
+                  "Повысить зарплату после выполнения KPI"
+                ]
+              }
+            },
+            "transcript": [
+              {
+                "turn_id": "turn-1",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Согласен."
+              },
+              {
+                "turn_id": "turn-1",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Договорились."
+              },
+              {
+                "turn_id": "turn-2",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Продолжим обсуждение."
+              },
+              {
+                "turn_id": "turn-2",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Давайте согласуем измеримые условия."
+              }
+            ]
+          }
         }
       }
     },

@@ -144,7 +144,7 @@ def test_managed_turn_contract_through_independent_http_processes(ai_service_url
             "accepted": send_scenario("accepted"),
             "blocked": send_scenario("blocked"),
             "model_error": send_scenario("model_error"),
-            "state_conflict": send_scenario("state_conflict"),
+            "agreement_continues": send_scenario("agreement_continues"),
             "unauthorized": send_scenario("unauthorized", authorized=False),
         }
 

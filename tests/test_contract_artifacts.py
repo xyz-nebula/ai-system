@@ -24,19 +24,20 @@ def test_managed_turn_examples_match_public_contracts_and_use_placeholders() -> 
     case = examples["case"]
     scenarios = examples["scenarios"]
 
-    for name in ("accepted", "blocked", "model_error"):
+    for name in ("accepted", "blocked", "model_error", "agreement_continues"):
         request = TurnRequest.model_validate({"case": case, **scenarios[name]["request"]["body"]})
         response = TurnResponse.model_validate(scenarios[name]["response"]["body"])
         assert response.session_id == request.snapshot.session_id
         assert response.turn_id == request.turn_id
 
-    for name in ("state_conflict", "unauthorized"):
-        TurnRequest.model_validate({"case": case, **scenarios[name]["request"]["body"]})
+    TurnRequest.model_validate({"case": case, **scenarios["unauthorized"]["request"]["body"]})
 
     model_error = scenarios["model_error"]
     assert model_error["response"]["body"]["snapshot"] == model_error["request"]["body"]["snapshot"]
     assert examples["authorized_headers"]["Authorization"] == "Bearer <service-token>"
     assert examples["request_body_rule"].startswith("Send the top-level case")
+    assert "not a closed round" in examples["round_lifecycle_rule"]
+    assert "network timeouts" in examples["round_timer_rule"]
     assert case["player_private_context"].startswith("[REDACTED:")
     assert case["opponent_private_context"].startswith("[REDACTED:")
 

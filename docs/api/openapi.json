@@ -542,6 +542,18 @@
               }
             ]
           },
+          "restored_from_agreement": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restored From Agreement"
+          },
           "satisfied_requirement_ids": {
             "items": {
               "$ref": "#/components/schemas/NonEmptyText"

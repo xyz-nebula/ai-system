@@ -57,7 +57,12 @@ class DeferringOpponent:
 class OfferThenDealOpponent:
     async def respond(self, context: OpponentContext) -> object:
         if context.state.turn_count == 0:
-            return {"text": "Предлагаю одну неделю контроля и KPI 120%."}
+            return {
+                "text": (
+                    "Предлагаю одну неделю контроля, KPI 120% и автоматическое повышение; "
+                    "вы компенсируете пропуск."
+                )
+            }
         return {
             "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
             "resolution": {
@@ -148,7 +153,10 @@ async def test_finished_agreement_reports_both_sides_commitments_without_skill_s
                     "transcript": [],
                 },
                 "turn_id": "turn-1",
-                "user_text": "Предлагаю неделю контроля и KPI 120% с автоматическим повышением.",
+                "user_text": (
+                    "Компенсирую пропущенный день и предлагаю неделю контроля, KPI 120% "
+                    "с автоматическим повышением."
+                ),
             },
         )
         assert turn.status_code == 200

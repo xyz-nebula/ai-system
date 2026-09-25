@@ -126,7 +126,7 @@ def next_day_request() -> dict[str, object]:
         },
         "snapshot": {"session_id": "demo-validation", "state": {"turn_count": 0}, "transcript": []},
         "turn_id": "turn-1",
-        "user_text": "Предлагаю одну контрольную неделю и KPI 120%.",
+        "user_text": ("Предлагаю одну контрольную неделю, KPI 120% и автоматическое повышение."),
     }
 
 
@@ -283,8 +283,10 @@ async def test_opponent_cannot_skip_directly_to_red_line_position() -> None:
 @pytest.mark.anyio
 async def test_specific_new_commitment_advances_next_day_case_to_target_position() -> None:
     user_text = (
-        "Тогда предлагаю 2 недели контрольного периода с KPI 120% "
-        "и автоматическим повышением."
+        "Тогда предлагаю 2 недели контрольного периода с KPI 120% и автоматическим повышением. "
+        "Обязуюсь компенсировать последствия пропуска. "
+        "Обязуюсь не допускать новых нарушений дисциплины. "
+        "Обязуюсь сообщать о форс-мажоре сразу."
     )
     app = create_app(
         opponent=RawOpponent(
@@ -328,9 +330,9 @@ async def test_specific_new_commitment_advances_next_day_case_to_target_position
     result = response.json()
     assert result["status"] == "accepted"
     assert result["snapshot"]["state"]["opponent_progress"]["current_step_id"] == "target"
-    assert result["snapshot"]["state"]["opponent_progress"][
-        "satisfied_requirement_ids"
-    ] == ["measurable-trial"]
+    assert result["snapshot"]["state"]["opponent_progress"]["satisfied_requirement_ids"] == [
+        "measurable-trial"
+    ]
 
 
 @pytest.mark.anyio
@@ -406,7 +408,7 @@ async def test_refused_prevention_commitments_do_not_unlock_red_line() -> None:
                     "requirement_ids": ["prevent-repeat"],
                     "evidence_quote": user_text,
                 },
-            }
+            },
         )
     )
     first = await post_turn(
@@ -528,15 +530,12 @@ async def test_blocked_follow_up_preserves_earned_opponent_position() -> None:
     app = create_app(
         opponent=RawOpponent(
             {
-                "text": (
-                    "Готов обсуждать 2 недели контроля, KPI 120% и автоматическое повышение."
-                ),
+                "text": ("Готов обсуждать 2 недели контроля, KPI 120% и автоматическое повышение."),
                 "position_transition": {
                     "to_step_id": "target",
                     "requirement_ids": ["measurable-trial"],
                     "evidence_quote": (
-                        "Предлагаю 2 недели контроля с KPI 120% "
-                        "и автоматическим повышением."
+                        "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                     ),
                 },
             }
@@ -546,9 +545,7 @@ async def test_blocked_follow_up_preserves_earned_opponent_position() -> None:
         app,
         position_request(
             session_id="preserved-position",
-            user_text=(
-                "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-            ),
+            user_text=("Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."),
         ),
     )
     assert first.json()["status"] == "accepted"
@@ -583,8 +580,7 @@ async def test_internal_position_identifiers_are_not_returned_to_player() -> Non
                     "to_step_id": "target",
                     "requirement_ids": ["measurable-trial"],
                     "evidence_quote": (
-                        "Предлагаю 2 недели контроля с KPI 120% "
-                        "и автоматическим повышением."
+                        "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                     ),
                 },
             }
@@ -594,9 +590,7 @@ async def test_internal_position_identifiers_are_not_returned_to_player() -> Non
         app,
         position_request(
             session_id="private-position",
-            user_text=(
-                "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-            ),
+            user_text=("Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."),
         ),
     )
 
@@ -616,8 +610,7 @@ async def test_repeated_requirement_cannot_advance_position_again() -> None:
                 "to_step_id": "target",
                 "requirement_ids": ["measurable-trial"],
                 "evidence_quote": (
-                    "Предлагаю 2 недели контроля с KPI 120% "
-                    "и автоматическим повышением."
+                    "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                 ),
             },
         },
@@ -633,9 +626,7 @@ async def test_repeated_requirement_cannot_advance_position_again() -> None:
         app,
         position_request(
             session_id="repeated-requirement",
-            user_text=(
-                "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-            ),
+            user_text=("Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."),
         ),
     )
     assert first.json()["status"] == "accepted"
@@ -654,9 +645,10 @@ async def test_repeated_requirement_cannot_advance_position_again() -> None:
     result = second.json()
     assert result["status"] == "accepted"
     assert result["snapshot"]["state"]["turn_count"] == 2
-    assert result["snapshot"]["state"]["opponent_progress"] == first_snapshot["state"][
-        "opponent_progress"
-    ]
+    assert (
+        result["snapshot"]["state"]["opponent_progress"]
+        == first_snapshot["state"]["opponent_progress"]
+    )
 
 
 @pytest.mark.anyio
@@ -727,8 +719,7 @@ async def test_negated_offer_cannot_satisfy_concession_evidence_markers() -> Non
 @pytest.mark.anyio
 async def test_disclaimed_offer_cannot_satisfy_concession_evidence_markers() -> None:
     user_text = (
-        "Я не говорил, что готов предложить 2 недели с KPI 120% "
-        "и автоматическим повышением."
+        "Я не говорил, что готов предложить 2 недели с KPI 120% и автоматическим повышением."
     )
     app = create_app(
         opponent=RawOpponent(
@@ -753,10 +744,7 @@ async def test_disclaimed_offer_cannot_satisfy_concession_evidence_markers() -> 
 
 @pytest.mark.anyio
 async def test_negated_target_terms_cannot_satisfy_concession_evidence() -> None:
-    user_text = (
-        "Предлагаю не 2 недели с KPI 120% и автоматическим повышением, "
-        "а оставить 4 недели."
-    )
+    user_text = "Предлагаю не 2 недели с KPI 120% и автоматическим повышением, а оставить 4 недели."
     app = create_app(
         opponent=RawOpponent(
             {
@@ -815,12 +803,7 @@ async def test_agreement_cannot_bypass_position_ladder_with_unlisted_terms() -> 
 async def test_counter_offer_in_days_cannot_bypass_position_ladder() -> None:
     app = create_app(
         opponent=RawOpponent(
-            {
-                "text": (
-                    "Могу предложить 7 дней контроля при KPI 100% "
-                    "и автоматическое повышение."
-                )
-            }
+            {"text": ("Могу предложить 7 дней контроля при KPI 100% и автоматическое повышение.")}
         )
     )
     response = await post_turn(
@@ -928,9 +911,7 @@ async def test_partial_resolution_cannot_hide_untracked_position_terms() -> None
                 "text": "Частично согласен, но один вопрос пока остаётся открытым.",
                 "resolution": {
                     "kind": "partial_agreement",
-                    "commitments": [
-                        "Одна неделя, KPI 100%, повышение не автоматическое"
-                    ],
+                    "commitments": ["Одна неделя, KPI 100%, повышение не автоматическое"],
                     "open_points": ["Порядок оформления повышения"],
                 },
             }
@@ -961,8 +942,7 @@ async def test_partial_resolution_cannot_hide_untracked_position_terms() -> None
                 "to_step_id": "target",
                 "requirement_ids": ["measurable-trial"],
                 "evidence_quote": (
-                    "Предлагаю 2 недели контроля с KPI 120% "
-                    "и автоматическим повышением."
+                    "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                 ),
             },
         },
@@ -975,8 +955,7 @@ async def test_partial_resolution_cannot_hide_untracked_position_terms() -> None
                 "to_step_id": "target",
                 "requirement_ids": ["measurable-trial"],
                 "evidence_quote": (
-                    "Предлагаю 2 недели контроля с KPI 120% "
-                    "и автоматическим повышением."
+                    "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                 ),
             },
         },
@@ -991,8 +970,7 @@ async def test_partial_resolution_cannot_hide_untracked_position_terms() -> None
                 "to_step_id": "target",
                 "requirement_ids": ["measurable-trial"],
                 "evidence_quote": (
-                    "Предлагаю 2 недели контроля с KPI 120% "
-                    "и автоматическим повышением."
+                    "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
                 ),
             },
         },
@@ -1006,9 +984,7 @@ async def test_transition_cannot_add_unauthorized_conditions(
         app,
         position_request(
             session_id="transition-extra-conditions",
-            user_text=(
-                "Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."
-            ),
+            user_text=("Предлагаю 2 недели контроля с KPI 120% и автоматическим повышением."),
         ),
     )
 
@@ -1081,9 +1057,7 @@ async def test_private_concession_requirement_description_is_not_returned() -> N
         "и автоматическим повышением после выполнения"
     )
     app = create_app(
-        opponent=RawOpponent(
-            {"text": f"Основание моей следующей уступки: {private_description}."}
-        )
+        opponent=RawOpponent({"text": f"Основание моей следующей уступки: {private_description}."})
     )
     response = await post_turn(
         app,
@@ -1325,7 +1299,10 @@ async def test_valid_agreement_updates_state_only_after_opponent_proposal() -> N
                     "transcript": [],
                 },
                 "turn_id": "turn-1",
-                "user_text": "Предлагаю одну контрольную неделю и KPI 120%. Затем повышение автоматически.",
+                "user_text": (
+                    "Компенсирую пропущенный день. Предлагаю одну контрольную неделю "
+                    "и KPI 120%. Затем повышение автоматически."
+                ),
             },
         )
 

@@ -196,17 +196,25 @@ class OpponentPositionProgress(Contract):
     current_step_id: str = Field(min_length=1)
     satisfied_requirement_ids: list[NonEmptyText] = Field(default_factory=list)
     last_transition: AppliedPositionTransition | None = None
+    restored_from_agreement: Literal[True] | None = None
 
     @model_validator(mode="after")
     def transition_matches_progress(self) -> Self:
         if len(self.satisfied_requirement_ids) != len(set(self.satisfied_requirement_ids)):
             raise ValueError("satisfied concession requirements must be unique")
-        if self.satisfied_requirement_ids and self.last_transition is None:
+        if (
+            self.satisfied_requirement_ids
+            and self.last_transition is None
+            and self.restored_from_agreement is not True
+        ):
             raise ValueError("progressed position needs its last transition evidence")
+        if self.restored_from_agreement is True and self.last_transition is not None:
+            raise ValueError("restored position cannot invent transition evidence")
+        if self.restored_from_agreement is True and not self.satisfied_requirement_ids:
+            raise ValueError("restored position must represent a progressed agreement")
         if self.last_transition is not None and (
             self.last_transition.to_step_id != self.current_step_id
-            or not set(self.last_transition.requirement_ids)
-            <= set(self.satisfied_requirement_ids)
+            or not set(self.last_transition.requirement_ids) <= set(self.satisfied_requirement_ids)
         ):
             raise ValueError("last transition and position progress disagree")
         return self
@@ -322,12 +330,10 @@ class PreparationCard(Contract):
             if text is not None:
                 items.append(PreparationItem(kind=kind, text=text))
         items.extend(
-            PreparationItem(kind="planned_question", text=text)
-            for text in self.planned_questions
+            PreparationItem(kind="planned_question", text=text) for text in self.planned_questions
         )
         items.extend(
-            PreparationItem(kind="possible_solution", text=text)
-            for text in self.possible_solutions
+            PreparationItem(kind="possible_solution", text=text) for text in self.possible_solutions
         )
         items.extend(PreparationItem(kind="argument", text=text) for text in self.arguments)
         return items

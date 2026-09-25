@@ -84,6 +84,8 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "из каждой evidence_groups" in system
             assert "Не раскрывай идентификаторы ступеней" in system
             assert "не объявляй разговор или раунд завершённым" in system
+            assert "не завершает раунд" in system
+            assert "внешний вызов /v1/finish" in system
             return completion({"text": "Какие условия вы предлагаете?"})
         if role == "[ARENA_VALIDATOR]":
             assert "premature_ending" in system
@@ -206,9 +208,7 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
                 json={
                     "case": CASE,
                     "snapshot": blocked.json()["snapshot"],
-                    "preparation": {
-                        "planned_questions": ["Спросить, как восстановить доверие."]
-                    },
+                    "preparation": {"planned_questions": ["Спросить, как восстановить доверие."]},
                 },
             )
 
@@ -217,9 +217,10 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
     assert result["outcome"]["kind"] == "no_agreement"
     assert all(slot["status"] == "ready" for slot in result["judge_verdicts"])
     assert result["trainer_feedback"]["status"] == "ready"
-    assert result["trainer_feedback"]["feedback"]["plan_vs_reality"]["items"][0][
-        "status"
-    ] == "followed"
+    assert (
+        result["trainer_feedback"]["feedback"]["plan_vs_reality"]["items"][0]["status"]
+        == "followed"
+    )
     assert Counter(role for role, _ in calls) == {
         "[ARENA_GUARD]": 2,
         "[ARENA_OPPONENT]": 2,
@@ -228,12 +229,10 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
         "[ARENA_TRAINER]": 1,
     }
     assert all(
-        body["chat_template_kwargs"] == {"enable_thinking": False}
-        for role, body in calls[:6]
+        body["chat_template_kwargs"] == {"enable_thinking": False} for role, body in calls[:6]
     )
     assert all(
-        body["chat_template_kwargs"] == {"enable_thinking": True}
-        for role, body in calls[6:]
+        body["chat_template_kwargs"] == {"enable_thinking": True} for role, body in calls[6:]
     )
 
 
@@ -242,9 +241,7 @@ async def test_turn_accepts_qwen_json_wrapped_in_one_markdown_fence() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         role = json.loads(request.content)["messages"][0]["content"].split("\n", 1)[0]
         if role == "[ARENA_GUARD]":
-            return text_completion(
-                '```json\n{"decision": "allow", "reason": null}\n```'
-            )
+            return text_completion('```json\n{"decision": "allow", "reason": null}\n```')
         if role == "[ARENA_OPPONENT]":
             return completion({"text": "Предлагаю обсудить KPI и срок контроля."})
         if role == "[ARENA_VALIDATOR]":

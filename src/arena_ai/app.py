@@ -41,7 +41,13 @@ from arena_ai.contracts import (
 )
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
-from arena_ai.opponent_position import UnearnedConcessionError, apply_position_transition
+from arena_ai.opponent_position import (
+    UnearnedConcessionError,
+    apply_position_transition,
+    mentions_deal_terms,
+    restore_position_progress,
+    stated_automatic_raise,
+)
 from arena_ai.outcome import determine_outcome
 from arena_ai.privacy import (
     contains_private_phrase,
@@ -147,7 +153,13 @@ def contains_unambiguous_physical_threat(text: str) -> bool:
 def opponent_role_rejection_reason(text: str) -> ValidatorRejectReason | None:
     lowered = text.casefold()
     if re.search(
-        r"(?:разговор|обсуждение|диалог)\s+(?:окончен|закончен|заверш[её]н)|"
+        r"(?:разговор|обсуждение|диалог|раунд|поединок|переговоры)\s+"
+        r"(?:окончен\w*|закончен\w*|заверш[её]н\w*|прекращ[её]н\w*|прекраща\w*)|"
+        r"\bя\s+(?:завершаю|заканчиваю|закончил|завершил|прекращаю|прекратил)\s+"
+        r"(?:(?:эти|этот|наш|наши)\s+)?"
+        r"(?:разговор|обсуждение|диалог|раунд|поединок|переговоры)\b|"
+        r"\bна\s+этом\s+(?:разговор|обсуждение|диалог|раунд|поединок|переговоры)\s+"
+        r"(?:завершаю|заканчиваю|закончил|завершил|прекращаю|прекратил)\b|"
         r"\bя\s+больше\s+не\s+буду\s+продолжать\b|"
         r"\bна\s+этом\s+(?:разговор|обсуждение)\s+(?:окончен|закончено)\b",
         lowered,
@@ -166,6 +178,172 @@ def opponent_role_rejection_reason(text: str) -> ValidatorRejectReason | None:
     ):
         return "role_break"
     return None
+
+
+def standard_kpi_commitment(commitment: str, terms: AgreementResolution) -> bool:
+    match = re.fullmatch(
+        r"выполнить\s+(?:kpi|кпи)\s+(?P<kpi>\d{1,3})\s*%?"
+        r"(?:\s+за\s+(?:(?P<count>одну|один|две|три|четыре|\d+)\s+)?"
+        r"недел\w*)?",
+        commitment.casefold().strip(),
+    )
+    if match is None or int(match.group("kpi")) != terms.kpi_percent:
+        return False
+    count = match.group("count")
+    if count is None:
+        return True
+    weeks = {"одну": 1, "один": 1, "две": 2, "три": 3, "четыре": 4}
+    return weeks.get(count, int(count) if count.isdigit() else -1) == terms.control_weeks
+
+
+def commitment_markers(text: str) -> set[str]:
+    stopwords = {"за", "после", "о", "об", "и", "на", "при", "с", "в", "по"}
+    return {
+        token if token.isdigit() or len(token) < 5 else token[:5]
+        for token in re.findall(r"[a-zа-яё]+|\d+", text.casefold())
+        if token not in stopwords and token != "не"
+    }
+
+
+def clause_has_refusal(clause: str) -> bool:
+    return re.search(r"\bне\b|\bотказ\w*", clause.casefold()) is not None
+
+
+def clause_has_commitment_act(clause: str, source: Literal["player", "offer", "opponent"]) -> bool:
+    lowered = clause.casefold()
+    if clause.strip().endswith("?"):
+        return False
+    if source == "player":
+        if re.search(r"\b(?:директор|руководитель|работодатель|он|она|они|вы|ты)\b", lowered):
+            return False
+        return (
+            re.search(
+                r"\b(?:обязуюсь|обещаю|готов(?:а)?|беру\s+на\s+себя|"
+                r"компенсирую|возмещу|выполню|сообщу|предупрежу|закрою|"
+                r"не\s+допущу)\b",
+                lowered,
+            )
+            is not None
+        )
+    if source == "offer":
+        return re.search(r"\b(?:вы|ты|менеджер|сотрудник|предлагаю)\b", lowered) is not None
+    return (
+        re.search(
+            r"\b(?:я|согласен|обязуюсь|обещаю|гарантирую|директор|беру\s+на\s+себя)\b",
+            lowered,
+        )
+        is not None
+    )
+
+
+def commitment_is_grounded(
+    commitment: str,
+    evidence: str,
+    terms: AgreementResolution,
+    *,
+    source: Literal["player", "offer", "opponent"] = "player",
+) -> bool:
+    if standard_kpi_commitment(commitment, terms):
+        if not mentions_deal_terms(evidence, terms):
+            return False
+        clauses = re.findall(r"[^.!?;\n]+[.!?;]?", evidence)
+        kpi_clauses = [
+            clause for clause in clauses if re.search(r"\b(?:kpi|кпи)\b", clause.casefold())
+        ]
+        if source == "offer":
+            return any(
+                not clause_has_refusal(clause)
+                and not clause.strip().endswith("?")
+                and re.search(r"\b(?:вы|ты|сотрудник|менеджер)\b", clause.casefold())
+                for clause in kpi_clauses
+            )
+        if source == "player":
+            ambiguous_owner = any(
+                clause.strip().endswith("?")
+                or re.search(
+                    r"\b(?:директор|руководитель|работодатель|он|она|они|вы|ты)\b",
+                    clause.casefold(),
+                )
+                for clause in kpi_clauses
+            )
+            if ambiguous_owner:
+                return False
+        return any(
+            not clause_has_refusal(clause)
+            and (
+                clause_has_commitment_act(clause, source)
+                or (source == "player" and re.search(r"\bпредлагаю\b", clause.casefold()))
+            )
+            for clause in kpi_clauses
+        )
+
+    required = commitment_markers(commitment)
+    required_negation = re.search(r"\bне\b", commitment.casefold()) is not None
+    if not required:
+        return False
+    return any(
+        required <= commitment_markers(clause)
+        and clause_has_refusal(clause) == required_negation
+        and clause_has_commitment_act(clause, source)
+        for clause in re.findall(r"[^.!?;\n]+[.!?;]?", evidence)
+    )
+
+
+def commitment_is_contradicted(commitment: str, player_text: str) -> bool:
+    required = commitment_markers(commitment)
+    required_negation = re.search(r"\bне\b", commitment.casefold()) is not None
+    return any(
+        required <= commitment_markers(clause) and clause_has_refusal(clause) != required_negation
+        for clause in re.split(r"[.!?;\n]+", player_text)
+    )
+
+
+def standard_salary_raise_commitment(commitment: str, terms: AgreementResolution) -> bool:
+    if stated_automatic_raise(commitment) is True and not terms.automatic_raise:
+        return False
+    return (
+        re.fullmatch(
+            r"(?:автоматически\s+)?повысить\s+зарплату"
+            r"(?:\s+после\s+(?:выполнения\s+)?(?:условий|kpi|кпи))?",
+            commitment.casefold().strip(),
+        )
+        is not None
+    )
+
+
+def discussion_only_clause(clause: str) -> bool:
+    lowered = clause.casefold()
+    return (
+        re.search(r"\b(?:предлагаю|согласен|готов\w*|принимаю)\b", lowered) is not None
+        and re.search(r"\b(?:обсуд\w*|обсужд\w*|рассмотр\w*|уточн\w*|вернут\w*)\b", lowered)
+        is not None
+    )
+
+
+def affirmative_deal_utterance(text: str, terms: AgreementResolution) -> bool:
+    lowered = text.casefold()
+    clauses = re.split(r"[.!?;\n]+", lowered)
+    return (
+        mentions_deal_terms(lowered, terms)
+        and any(
+            re.search(r"\b(?:предлагаю|согласен|принимаю|обязуюсь|готов\w*)\b", clause)
+            and not discussion_only_clause(clause)
+            and "недел" in clause
+            and re.search(rf"\b(?:kpi|кпи)\s*[:=]?\s*{terms.kpi_percent}\b", clause)
+            for clause in clauses
+        )
+        and any(
+            stated_automatic_raise(clause) is terms.automatic_raise
+            and not discussion_only_clause(clause)
+            for clause in clauses
+        )
+        and re.search(
+            r"\bне\s+(?:предлага\w*|соглас\w*|принима\w*|обеща\w*|готов\w*)\b|"
+            r"\bне\s+говорил\w*.{0,60}\b(?:предлага\w*|соглас\w*|обеща\w*)\b",
+            lowered,
+        )
+        is None
+    )
 
 
 def valid_proposal(
@@ -191,8 +369,7 @@ def valid_proposal(
         explicit_partial_signal = any(word in player_text for word in ("соглас", "предлага")) or (
             "готов" in player_text
             and any(
-                word in player_text
-                for word in ("отдельн", "открыт", "остал", "пока", "обсудим")
+                word in player_text for word in ("отдельн", "открыт", "остал", "пока", "обсудим")
             )
         )
         return (
@@ -213,19 +390,65 @@ def valid_proposal(
         return False
     terms = resolution
     rules = case.agreement_rules
-    prior_offer = any(
-        entry.speaker == "opponent"
-        and entry.status == "accepted"
-        and str(terms.kpi_percent) in entry.text
-        and "недел" in entry.text.casefold()
-        for entry in transcript
+    last_opponent_offer = next(
+        (
+            entry
+            for entry in reversed(transcript)
+            if entry.speaker == "opponent" and entry.status == "accepted"
+        ),
+        None,
+    )
+    prior_offer = last_opponent_offer is not None and affirmative_deal_utterance(
+        last_opponent_offer.text,
+        terms,
+    )
+    player_restates_terms = (
+        re.search(
+            r"\b(?:kpi|кпи|недел\w*|автоматич\w*|повышен\w*|\d+)\b",
+            player_text,
+        )
+        is not None
+    )
+    accepted_prior_offer = (
+        "согласен" in player_text
+        and prior_offer
+        and not any(
+            discussion_only_clause(clause) for clause in re.split(r"[.!?;\n]+", player_text)
+        )
+        and (not player_restates_terms or affirmative_deal_utterance(player_text, terms))
+    )
+    commitment_evidence = (
+        last_opponent_offer.text.casefold()
+        if accepted_prior_offer and last_opponent_offer is not None
+        else player_text
+    )
+    commitments_are_grounded = all(
+        commitment_is_grounded(
+            commitment,
+            commitment_evidence,
+            terms,
+            source="offer" if accepted_prior_offer else "player",
+        )
+        for commitment in terms.employee_commitments
+    ) and not any(
+        commitment_is_contradicted(commitment, player_text)
+        or commitment_is_contradicted(commitment, proposal.text)
+        for commitment in terms.employee_commitments
+    )
+    director_commitments_are_stated = all(
+        not (stated_automatic_raise(commitment) is True and not terms.automatic_raise)
+        and not commitment_is_contradicted(commitment, proposal.text)
+        and (
+            standard_salary_raise_commitment(commitment, terms)
+            or commitment_is_grounded(commitment, proposal.text, terms, source="opponent")
+        )
+        for commitment in terms.director_commitments
     )
     return (
         not re.search(r"\bне\s+(?:готов|согласен|принимаю)\b|\bотказываюсь\b", player_text)
-        and (
-            (str(terms.kpi_percent) in player_text and "недел" in player_text)
-            or ("согласен" in player_text and prior_offer)
-        )
+        and (affirmative_deal_utterance(player_text, terms) or accepted_prior_offer)
+        and commitments_are_grounded
+        and director_commitments_are_stated
         and rules.min_control_weeks <= terms.control_weeks <= rules.max_control_weeks
         and rules.min_kpi_percent <= terms.kpi_percent <= rules.max_kpi_percent
         and (terms.automatic_raise or not rules.require_automatic_raise)
@@ -234,6 +457,7 @@ def valid_proposal(
             text,
         )
         and not re.search(r"\bсогласен\s+(?:обсудить|рассмотреть|вернуться)\b", text)
+        and not any(discussion_only_clause(clause) for clause in re.split(r"[.!?;\n]+", text))
         and not re.search(r"повышен\w*.{0,40}(?:не\s+обеща|не\s+гарантир|не\s+подтвержд)", text)
         and any(
             word in text
@@ -242,7 +466,7 @@ def valid_proposal(
         and str(terms.kpi_percent) in text
         and "недел" in text
         and "повышен" in text
-        and (not terms.automatic_raise or "автоматич" in text or "без повторного" in text)
+        and stated_automatic_raise(text) is terms.automatic_raise
     )
 
 
@@ -378,8 +602,6 @@ def create_app(
         dependencies=[Depends(require_service_token)],
     )
     async def take_turn(request: TurnRequest) -> TurnResponse:
-        if request.snapshot.state.stage != "negotiating":
-            raise HTTPException(status_code=409, detail="Duel already has a decision")
         blocked_reason = guard_reason(request.user_text)
         if blocked_reason is not None:
             return blocked_turn_response(request, blocked_reason)
@@ -393,6 +615,7 @@ def create_app(
                 transcript=public_view.transcript,
                 user_text=request.user_text,
             )
+
             def validated_guard(raw: object) -> GuardDecision | None:
                 try:
                     return GuardDecision.model_validate(raw)
@@ -419,6 +642,14 @@ def create_app(
             if guard_decision.decision == "block":
                 assert guard_decision.reason is not None
                 return blocked_turn_response(request, guard_decision.reason)
+        position_progress = restore_position_progress(
+            strategy=request.case.opponent_strategy,
+            current=request.snapshot.state.opponent_progress,
+            agreement=request.snapshot.state.agreement,
+        )
+        opponent_state = request.snapshot.state.model_copy(
+            update={"opponent_progress": position_progress}
+        )
         context = OpponentContext(
             shared_context=request.case.shared_context,
             opponent_private_context=request.case.opponent_private_context,
@@ -426,7 +657,7 @@ def create_app(
             opponent_strategy=request.case.opponent_strategy,
             player_role=request.case.player_role,
             opponent_role=request.case.opponent_role,
-            state=request.snapshot.state,
+            state=opponent_state,
             transcript=public_transcript(request.snapshot.transcript),
             user_text=request.user_text,
         )
@@ -445,6 +676,12 @@ def create_app(
             if role_reason is not None:
                 last_proposal_error = VALIDATION_ERROR_CODES[role_reason]
                 return None
+            if request.snapshot.state.agreement is not None and isinstance(
+                proposal.resolution,
+                (PartialDecision, DeferredDecision),
+            ):
+                last_proposal_error = "invalid_opponent_output"
+                return None
             if not valid_proposal(
                 proposal,
                 request.case,
@@ -456,11 +693,12 @@ def create_app(
             try:
                 opponent_progress = apply_position_transition(
                     strategy=request.case.opponent_strategy,
-                    current=request.snapshot.state.opponent_progress,
+                    current=position_progress,
                     proposal=proposal,
                     user_text=request.user_text,
                     turn_id=request.turn_id,
                     transcript=request.snapshot.transcript,
+                    stored_agreement=request.snapshot.state.agreement,
                 )
             except UnearnedConcessionError:
                 last_proposal_error = "opponent_unearned_concession"
@@ -497,7 +735,7 @@ def create_app(
             if validator is not None:
                 validation_context = ValidationContext(
                     case=request.case,
-                    state=request.snapshot.state,
+                    state=opponent_state,
                     transcript=public_transcript(request.snapshot.transcript),
                     user_text=request.user_text,
                     proposal=candidate,
@@ -532,25 +770,33 @@ def create_app(
         if proposal is None:
             return model_failure_response(request, attempt_error)
         resolution = proposal.resolution
-        agreement = (
-            resolution.as_deal_terms()
-            if isinstance(resolution, AgreementResolution)
-            else None
+        proposed_agreement = (
+            resolution.as_deal_terms() if isinstance(resolution, AgreementResolution) else None
         )
-        decision = (
+        proposed_decision = (
             resolution if isinstance(resolution, (PartialDecision, DeferredDecision)) else None
         )
+        if proposed_agreement is not None:
+            agreement = proposed_agreement
+            decision = None
+            stage = "agreed"
+        elif request.snapshot.state.agreement is not None:
+            agreement = request.snapshot.state.agreement
+            decision = None
+            stage = "agreed"
+        elif proposed_decision is not None:
+            agreement = None
+            decision = proposed_decision
+            stage = proposed_decision.kind
+        else:
+            agreement = None
+            decision = request.snapshot.state.decision
+            stage = request.snapshot.state.stage
         snapshot = SessionSnapshot(
             session_id=request.snapshot.session_id,
             state=SessionState(
                 turn_count=request.snapshot.state.turn_count + 1,
-                stage=(
-                    "agreed"
-                    if agreement is not None
-                    else decision.kind
-                    if decision is not None
-                    else "negotiating"
-                ),
+                stage=stage,
                 agreement=agreement,
                 decision=decision,
                 opponent_progress=opponent_progress,
