@@ -44,7 +44,9 @@ def assess(turn, *, novelty=None):
     def gateway(req):
         messages = json.loads(req.content)["messages"]
         context = json.loads(messages[1]["content"])
-        if "[V2_NOVELTY]" in messages[0]["content"]:
+        if "[V2_TEXT_MATCH]" in messages[0]["content"]:
+            reply = {"decision": "accept"}
+        elif "[V2_NOVELTY]" in messages[0]["content"]:
             assert set(context) == {"requirements", "current_user", "history"}
             assert all(
                 item["status"] == "accepted" and item["speaker"] == "player"
@@ -212,6 +214,8 @@ def test_managed_turn_does_not_commit_offer_after_novelty_rejection():
         context = json.loads(messages[1]["content"])
         if "[V2_GUARD]" in system:
             reply = {"decision": "allow", "reason": None}
+        elif "[V2_TEXT_MATCH]" in system:
+            reply = {"decision": "accept"}
         elif "[V2_OPPONENT]" in system:
             reply = offer(turn).model_dump(mode="json")
         elif "[V2_NOVELTY]" in system:

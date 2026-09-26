@@ -181,6 +181,8 @@ def test_earned_transition_is_grounded_in_the_committed_candidate_player_message
         messages = json.loads(request.content)["messages"]
         if "[V2_GUARD]" in messages[0]["content"]:
             content = {"decision": "allow", "reason": None}
+        elif "[V2_TEXT_MATCH]" in messages[0]["content"]:
+            content = {"decision": "accept"}
         elif "[V2_OPPONENT]" in messages[0]["content"]:
             content = {
                 "text": "Цена 4800 рублей за единицу, поставка за 12 дней.",
@@ -241,6 +243,8 @@ def test_confirmed_full_agreement_updates_state_without_finishing_the_round() ->
         context = json.loads(messages[1]["content"])
         if "[V2_GUARD]" in system:
             content = {"decision": "allow", "reason": None}
+        elif "[V2_TEXT_MATCH]" in system:
+            content = {"decision": "accept"}
         elif "[V2_OPPONENT]" in system:
             content = {
                 "text": "Согласен. Поставлю товар за 14 дней, вы оплачиваете по 5000 рублей за единицу.",
@@ -302,6 +306,8 @@ def test_unconfirmed_agreement_never_publishes_the_claim_or_changes_snapshot(fai
         context = json.loads(messages[1]["content"])
         if "[V2_GUARD]" in system:
             content = {"decision": "allow", "reason": None}
+        elif "[V2_TEXT_MATCH]" in system:
+            content = {"decision": "accept"}
         elif "[V2_OPPONENT]" in system:
             content = {
                 "text": "Согласен. Поставлю товар за 14 дней, вы оплачиваете по 5000 рублей за единицу.",

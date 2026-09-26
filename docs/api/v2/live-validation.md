@@ -190,3 +190,63 @@ Validator probe прошёл7/7; это проверка модели с защ�
 HTTP v2/rollout ещё не включены; следующий этап — handler и лимиты общего бюджета.
 Все четыре opt-in live tests прошли отдельным запуском, включая negative control.
 Ruff/format/ty и проверка rc.1 артефактов прошли; диагностический прототип удалён.
+
+## Cross-case baseline: 2026-09-27
+
+`tests/test_v2_cross_case_live.py` checks synthetic deadline (date), resource
+allocation (number) and responsibility/approval format (choice) cases through
+the same `QwenOfferValidator` with unchanged production prompts. These are not
+author-approved business cases or whole-session acceptance tests.
+
+With `qwen3.8-9b-q4`, five of six live scenarios passed. The earned resource
+allocation proposal was rejected with `terms_match_text=false`: the public
+proposal of four analyst hours matched structured value `4`. This is the historical
+pre-fix baseline. Deadline and approval-format earned proposals passed; all three
+unearned-pressure controls were rejected. The failing expectation is retained,
+not relaxed. This result does **not** establish cross-case readiness.
+
+Ordinary suite: **599 passed, 10 skipped**. Run the matrix explicitly with
+the existing model environment and `ARENA_RUN_LIVE_V2=1 uv run pytest -q
+tests/test_v2_cross_case_live.py`. Ordinary tests do not contact the model.
+
+### Follow-up diagnosis (same day)
+
+The original earned resource rejection reproduced. Changing only unit metadata,
+only the offer wording, or only adding a commitment independently produced
+`accept`; this does not prove a unique internal model cause.
+
+A generic label/type/unit prompt clarification made the original positive pass,
+but an added negative control was incorrectly accepted: public **40 hours** vs
+structured **4**. An additional exact-number clarification passed an isolated
+positive/negative pair, then failed that negative again in the complete repeat.
+Both prompt candidates were removed; production instructions remain unchanged.
+The failing controls are retained. This is an unresolved model-validation issue,
+not a completed fix or readiness claim.
+
+The final candidate repeat had **15 passed / 1 failed** (3 schema controls,
+9 cross-domain live controls, 4 earlier live regressions). Ordinary suite:
+**599 passed / 13 skipped**. Ruff/format/ty and rc.1 contract checks passed.
+Next: evaluate an independent narrow text/terms check rather than further
+domain-specific prompt examples. No v2 deployment or push was performed.
+
+### Independent TextMatch gate
+
+The next implementation adds a narrow `TextMatchContext`: negotiables, public
+text, typed terms and active role IDs. It contains no negotiating strategy,
+private role briefs, user history, preparation or other validator assessments.
+Structured offers must pass it before policy/concession validation. Its accept
+does not grant a concession. Reject/uncertain clears acceptance proofs; malformed
+JSON/HTTP errors preserve the snapshot through existing safe failure handling.
+Offers without terms retain the previous unstructured-offer validation.
+
+The same original positive, pressure and mismatch cases were retained unchanged.
+The full live run passed **16/16**: 3 schema controls, 9 live cross-domain controls
+and 4 earlier live regressions, in 137.66s on `qwen3.8-9b-q4`. Ordinary suite:
+**607 passed / 13 skipped**. This is a focused regression result, not universal
+case acceptance, full-session/finish/Judge/Trainer or HTTP v2 validation.
+
+The gate adds one model call per structured offer; total request budgets remain
+unimplemented. Backend wire schema rc.1 and the deployed v1 were not changed.
+The previously unstable resource mismatch was additionally rejected in three
+sequential opt-in repeats (2.65s, 2.45s, 2.59s); model errors are not counted as
+successful rejections. These repeats improve confidence only for this control.

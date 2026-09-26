@@ -72,19 +72,11 @@ def test_uncertain_assessment_preserves_exact_numeric_offer_on_model_wire() -> N
     def gateway(request):
         body = json.loads(request.content)
         context = json.loads(body["messages"][1]["content"], parse_float=Decimal)
-        assert context["offer"]["terms"]["values"][0]["value"] == Decimal("5000.000000000000000001")
-        assert context["player_brief"]["batna"] == "Обратиться к другому поставщику."
+        assert context["terms"]["values"][0]["value"] == Decimal("5000.000000000000000001")
+        assert "player_brief" not in context
         return httpx.Response(
             200,
-            json={
-                "choices": [
-                    {
-                        "message": {
-                            "content": '{"decision":"uncertain","terms_match_text":false,"concession_proofs":[]}'
-                        }
-                    }
-                ]
-            },
+            json={"choices": [{"message": {"content": '{"decision":"uncertain"}'}}]},
         )
 
     async def run():

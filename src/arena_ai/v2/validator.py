@@ -29,6 +29,10 @@ from arena_ai.v2.offers import (
     check_offer,
     require_unconditional_unquoted_commitment,
 )
+from arena_ai.v2.text_match import (
+    INSTRUCTION as TEXT_MATCH,
+)
+from arena_ai.v2.text_match import TextMatchAssessment, TextMatchContext
 
 
 class OfferPolicy(Contract):
@@ -57,6 +61,7 @@ class OfferValidationContext(Contract):
     opponent_private_phrases: list[Text]
     current_user: Evidence
     offer: OpponentOffer
+    terms_match_verified: bool
 
 
 class OfferValidationError(RuntimeError):
@@ -107,6 +112,10 @@ INSTRUCTION = """Ты независимый Validator переговорног�
 Само предложение допустимых условий не является раскрытием скрытой позиции:
 запрещено раскрывать её скрытый статус, внутренние ступени и правила перехода.
 terms_match_text проверяет семантическое соответствие, не буквальное совпадение:
+Если terms_match_verified=true, соответствие text и terms УЖЕ проверено отдельной
+проверкой: не переоценивай его по истории, уступкам или согласию пользователя,
+возвращай terms_match_text=true. Остальные требования проверь самостоятельно;
+проверенное соответствие текста НЕ означает допустимость уступки или accept.
 «я» — роль оппонента, «вы» — роль пользователя. Признание предложения не означает
 согласие пользователя на сделку. Если terms=null и текст не устанавливает пакет
 условий, terms_match_text=true. При любом несоответствии accept запрещён.
@@ -206,6 +215,27 @@ class QwenOfferValidator:
             require_unconditional_unquoted_commitment(request, offer)
         except ConcessionSyntaxError:
             return OfferAssessment(decision="reject", terms_match_text=False, concession_proofs=[])
+        if offer.terms is not None:
+            try:
+                text_match = await self.chat.complete(
+                    TEXT_MATCH,
+                    TextMatchContext(
+                        negotiables=[
+                            item.model_copy(deep=True) for item in request.case.negotiables
+                        ],
+                        text=offer.text,
+                        terms=offer.terms.model_copy(deep=True),
+                        player_role_id=request.case.player.role_id,
+                        opponent_role_id=request.case.opponent.role_id,
+                    ),
+                    TextMatchAssessment,
+                )
+            except ModelResponseError:
+                raise OfferValidationError("Offer model assessment unavailable") from None
+            if text_match.decision != "accept":
+                return OfferAssessment(
+                    decision=text_match.decision, terms_match_text=False, concession_proofs=[]
+                )
         opponent_data = for_opponent(request).model_dump(mode="python")
         opponent_data["agreement_policy"] = {
             "constraints": opponent_data["agreement_policy"]["constraints"],
@@ -223,6 +253,7 @@ class QwenOfferValidator:
                 quote=request.user_text,
             ),
             offer=offer.model_copy(deep=True),
+            terms_match_verified=offer.terms is not None,
         )
         try:
             assessment = await self.chat.complete(INSTRUCTION, context, OfferAssessment)
