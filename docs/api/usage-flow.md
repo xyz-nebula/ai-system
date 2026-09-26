@@ -36,7 +36,7 @@ sequenceDiagram
     B->>A: POST /v1/finish: case, последний snapshot, preparation?
     A-->>B: outcome, judge_verdicts, trainer_feedback
     B->>B: Сохранить итог
-    B-->>U: Публичная аналитика; ready/failed отдельно для каждого слота
+    B-->>U: Публичная аналитика, ready/failed отдельно для каждого слота
 ```
 
 Пути начала сессии, отправки текста и чтения результата на Backend согласовывают
