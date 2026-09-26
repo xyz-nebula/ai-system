@@ -175,6 +175,7 @@ Audio Engine озвучивает только проверенный ответ
 
 - [Гайд интеграции для Backend, Frontend и Audio Engine](docs/integration/team-integration.md)
 - [API-контракт и примеры](docs/api/README.md)
+- [Сценарий вызовов: CaseConfig → turn → snapshot → finish](docs/api/usage-flow.md)
 - [Серверная эксплуатация и SSH-туннель](docs/integration/server-deployment.md)
 - [Корпус судей и индексация](docs/judge-corpus.md)
 - [Локальная разработка и тесты](docs/local-development.md)
