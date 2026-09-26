@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 arena-ai = "arena_ai.cli:main"
+arena-ai-eval = "arena_ai.live_eval:main"
 
 [dependency-groups]
 dev = [

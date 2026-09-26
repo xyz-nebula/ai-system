@@ -1,0 +1,30 @@
+name: arena-rag
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ARENA_QDRANT_PORT:-6333}:6333"
+      - "127.0.0.1:${ARENA_QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  embeddings:
+    image: ${ARENA_EMBEDDINGS_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-1.9}
+    restart: unless-stopped
+    command:
+      - --model-id
+      - ${ARENA_EMBEDDINGS_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - --port
+      - "80"
+      - --max-batch-tokens
+      - ${ARENA_EMBEDDINGS_MAX_BATCH_TOKENS:-2048}
+    ports:
+      - "127.0.0.1:${ARENA_EMBEDDINGS_PORT:-8081}:80"
+    volumes:
+      - embeddings_cache:/data
+
+volumes:
+  qdrant_data:
+  embeddings_cache:

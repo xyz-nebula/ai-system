@@ -19,7 +19,8 @@ class DealOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -33,7 +34,7 @@ class PartialOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Согласуем компенсацию пропуска; KPI и дату повышения пока оставим открытыми.",
-            "decision": {
+            "resolution": {
                 "kind": "partial_agreement",
                 "commitments": ["Компенсировать пропущенный день"],
                 "open_points": ["KPI и дата повышения"],
@@ -45,7 +46,7 @@ class DeferringOpponent:
     async def respond(self, context: object) -> object:
         return {
             "text": "Вернёмся к решению завтра после уточнения KPI.",
-            "decision": {
+            "resolution": {
                 "kind": "deferred",
                 "reason": "Нужно уточнить измеримый KPI",
                 "next_step": "Завтра согласовать KPI и дату повышения",
@@ -56,10 +57,16 @@ class DeferringOpponent:
 class OfferThenDealOpponent:
     async def respond(self, context: OpponentContext) -> object:
         if context.state.turn_count == 0:
-            return {"text": "Предлагаю одну неделю контроля и KPI 120%."}
+            return {
+                "text": (
+                    "Предлагаю одну неделю контроля, KPI 120% и автоматическое повышение; "
+                    "вы компенсируете пропуск."
+                )
+            }
         return {
             "text": "Согласен: одна неделя, KPI 120%, затем повышение автоматически.",
-            "agreement": {
+            "resolution": {
+                "kind": "agreement",
                 "control_weeks": 1,
                 "kpi_percent": 120,
                 "automatic_raise": True,
@@ -146,7 +153,10 @@ async def test_finished_agreement_reports_both_sides_commitments_without_skill_s
                     "transcript": [],
                 },
                 "turn_id": "turn-1",
-                "user_text": "Предлагаю неделю контроля и KPI 120% с автоматическим повышением.",
+                "user_text": (
+                    "Компенсирую пропущенный день и предлагаю неделю контроля, KPI 120% "
+                    "с автоматическим повышением."
+                ),
             },
         )
         assert turn.status_code == 200
@@ -198,6 +208,35 @@ async def test_finish_reports_partial_agreement_and_open_points() -> None:
     assert finish.json()["outcome"]["commitments"] == ["Компенсировать пропущенный день"]
     assert finish.json()["outcome"]["open_points"] == ["KPI и дата повышения"]
     assert finish.json()["outcome"]["agreement"] is None
+
+
+@pytest.mark.anyio
+async def test_general_readiness_cannot_become_partial_agreement() -> None:
+    app = create_app(opponent=PartialOpponent())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        turn = await client.post(
+            "/v1/turn",
+            json={
+                "case": CASE,
+                "snapshot": {
+                    "session_id": "demo-general-readiness",
+                    "state": {"turn_count": 0},
+                    "transcript": [],
+                },
+                "turn_id": "turn-1",
+                "user_text": (
+                    "Понимаю ваши сомнения. Я готов компенсировать последствия пропуска "
+                    "и подтвердить ответственность измеримым результатом."
+                ),
+            },
+        )
+
+    assert turn.status_code == 200
+    assert turn.json()["status"] == "model_error"
+    assert turn.json()["error_code"] == "invalid_opponent_output"
+    assert turn.json()["snapshot"]["state"]["turn_count"] == 0
 
 
 @pytest.mark.anyio

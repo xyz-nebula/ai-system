@@ -1,12 +1,31 @@
 """Checks shared by model output boundaries."""
 
-from arena_ai.contracts import CaseConfig, GuardReason, TranscriptEntry
+from dataclasses import dataclass
+
+from arena_ai.contracts import (
+    AgreementResolution,
+    CaseConfig,
+    DeferredDecision,
+    GuardReason,
+    OpponentProposal,
+    PartialDecision,
+    PublicSessionState,
+    SessionSnapshot,
+    TranscriptEntry,
+)
 
 BLOCKED_SUMMARIES: dict[GuardReason, str] = {
     "prompt_override": "[Заблокировано: попытка изменить инструкции сервиса]",
     "private_data_request": "[Заблокировано: запрос закрытых вводных]",
     "hidden_position_request": "[Заблокировано: запрос скрытой переговорной позиции]",
+    "physical_harm_threat": "[Заблокировано: угроза физического вреда]",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class PublicDuelView:
+    state: PublicSessionState
+    transcript: list[TranscriptEntry]
 
 
 def contains_private_phrase(text: str, case: CaseConfig) -> bool:
@@ -17,6 +36,22 @@ def contains_private_phrase(text: str, case: CaseConfig) -> bool:
         *case.opponent_private_phrases,
     )
     return any(phrase.casefold() in visible_text for phrase in private_phrases if phrase)
+
+
+def visible_proposal_text(proposal: OpponentProposal) -> str:
+    """Flatten every model-produced field that can become public after a turn."""
+
+    resolution = proposal.resolution
+    parts = [proposal.text]
+    if isinstance(resolution, AgreementResolution):
+        parts.extend(resolution.employee_commitments)
+        parts.extend(resolution.director_commitments)
+    elif isinstance(resolution, PartialDecision):
+        parts.extend(resolution.commitments)
+        parts.extend(resolution.open_points)
+    elif isinstance(resolution, DeferredDecision):
+        parts.extend((resolution.reason, resolution.next_step))
+    return " ".join(parts)
 
 
 def public_transcript(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
@@ -32,3 +67,20 @@ def public_transcript(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
         else entry
         for entry in entries
     ]
+
+
+def public_session_state(snapshot: SessionSnapshot) -> PublicSessionState:
+    """Remove opponent-only strategy progress from evaluative model contexts."""
+
+    return PublicSessionState.model_validate(
+        snapshot.state.model_dump(mode="python", exclude={"opponent_progress"})
+    )
+
+
+def public_duel_view(snapshot: SessionSnapshot) -> PublicDuelView:
+    """Project a snapshot once for model roles that must not see opponent-only state."""
+
+    return PublicDuelView(
+        state=public_session_state(snapshot),
+        transcript=public_transcript(snapshot.transcript),
+    )

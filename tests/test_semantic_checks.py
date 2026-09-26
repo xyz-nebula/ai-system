@@ -36,12 +36,31 @@ class RecordingValidator:
 
     async def assess(self, context: ValidationContext) -> object:
         self.contexts.append(context)
-        return {"decision": self.decision}
+        return {
+            "decision": self.decision,
+            "reason": "factual_conflict" if self.decision == "reject" else None,
+        }
 
 
 class SimpleOpponent:
     async def respond(self, context: object) -> object:
         return {"text": "Предлагаю зафиксировать условия и ответственность."}
+
+
+class RecoveringGuard:
+    def __init__(self) -> None:
+        self.results = iter([{"unexpected": True}, {"decision": "allow", "reason": None}])
+
+    async def assess(self, context: GuardContext) -> object:
+        return next(self.results)
+
+
+class RecoveringValidator:
+    def __init__(self) -> None:
+        self.results = iter([{"unexpected": True}, {"decision": "accept"}])
+
+    async def assess(self, context: ValidationContext) -> object:
+        return next(self.results)
 
 
 @pytest.fixture
@@ -77,7 +96,10 @@ async def test_semantic_guard_blocks_paraphrased_hidden_position_request() -> No
 async def test_semantic_validator_rejects_proposal_before_snapshot_update() -> None:
     validator = RecordingValidator("reject")
     app = create_app(
-        opponent=SimpleOpponent(), guard=RecordingGuard("allow"), validator=validator
+        opponent=SimpleOpponent(),
+        guard=RecordingGuard("allow"),
+        validator=validator,
+        model_attempts=2,
     )
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -94,7 +116,8 @@ async def test_semantic_validator_rejects_proposal_before_snapshot_update() -> N
 
     assert response.status_code == 200
     result = response.json()
-    assert len(validator.contexts) == 1
+    assert len(validator.contexts) == 2
+    assert all(context.state.turn_count == 0 for context in validator.contexts)
     assert result["status"] == "model_error"
     assert result["error_code"] == "invalid_opponent_output"
     assert result["snapshot"]["transcript"] == []
@@ -102,7 +125,8 @@ async def test_semantic_validator_rejects_proposal_before_snapshot_update() -> N
 
 @pytest.mark.anyio
 async def test_uncertain_semantic_check_fails_closed() -> None:
-    app = create_app(opponent=SimpleOpponent(), guard=RecordingGuard("uncertain"))
+    guard = RecordingGuard("uncertain")
+    app = create_app(opponent=SimpleOpponent(), guard=guard, model_attempts=2)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -119,3 +143,29 @@ async def test_uncertain_semantic_check_fails_closed() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "model_error"
     assert response.json()["snapshot"]["transcript"] == []
+    assert len(guard.contexts) == 1
+
+
+@pytest.mark.anyio
+async def test_turn_recovers_from_invalid_guard_and_validator_outputs() -> None:
+    app = create_app(
+        opponent=SimpleOpponent(),
+        guard=RecoveringGuard(),
+        validator=RecoveringValidator(),
+        model_attempts=2,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/turn",
+            json={
+                "case": CASE,
+                "snapshot": SNAPSHOT,
+                "turn_id": "turn-recovered",
+                "user_text": "Как восстановить доверие?",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"

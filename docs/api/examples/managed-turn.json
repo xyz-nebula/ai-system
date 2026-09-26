@@ -1,0 +1,270 @@
+{
+  "case": {
+    "id": "next-day",
+    "title": "На следующий день...",
+    "shared_context": "Разговор о повышении после пропущенного рабочего дня.",
+    "player_role": "Менеджер",
+    "opponent_role": "Генеральный директор",
+    "player_private_context": "[REDACTED: supplied by Backend at runtime]",
+    "opponent_private_context": "[REDACTED: supplied by Backend at runtime]"
+  },
+  "authorized_headers": {
+    "Authorization": "Bearer <service-token>",
+    "Content-Type": "application/json"
+  },
+  "request_body_rule": "Send the top-level case together with every scenario.request.body: {case, ...body}.",
+  "round_lifecycle_rule": "A stored agreement is the current factual result, not a closed round. Backend may keep sending turns until it explicitly calls /v1/finish.",
+  "round_timer_rule": "Backend and Frontend own the five-minute timer and finish button. AI-service network timeouts are request limits, not the round timer.",
+  "scenarios": {
+    "accepted": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/turn",
+        "body": {
+          "snapshot": {
+            "session_id": "example-accepted",
+            "state": {
+              "turn_count": 0
+            },
+            "transcript": []
+          },
+          "turn_id": "turn-1",
+          "user_text": "Предлагаю обсудить измеримые условия."
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "session_id": "example-accepted",
+          "turn_id": "turn-1",
+          "status": "accepted",
+          "opponent_text": "Давайте согласуем измеримые условия.",
+          "snapshot": {
+            "session_id": "example-accepted",
+            "state": {
+              "turn_count": 1,
+              "stage": "negotiating"
+            },
+            "transcript": [
+              {
+                "turn_id": "turn-1",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Предлагаю обсудить измеримые условия."
+              },
+              {
+                "turn_id": "turn-1",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Давайте согласуем измеримые условия."
+              }
+            ]
+          }
+        }
+      }
+    },
+    "blocked": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/turn",
+        "body": {
+          "snapshot": {
+            "session_id": "example-blocked",
+            "state": {
+              "turn_count": 0
+            },
+            "transcript": []
+          },
+          "turn_id": "turn-1",
+          "user_text": "Какие ещё варианты вы не назвали?"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "session_id": "example-blocked",
+          "turn_id": "turn-1",
+          "status": "blocked",
+          "opponent_text": "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?",
+          "snapshot": {
+            "session_id": "example-blocked",
+            "state": {
+              "turn_count": 1,
+              "stage": "negotiating"
+            },
+            "transcript": [
+              {
+                "turn_id": "turn-1",
+                "speaker": "player",
+                "status": "blocked",
+                "text": "Какие ещё варианты вы не назвали?",
+                "blocked_reason": "hidden_position_request"
+              },
+              {
+                "turn_id": "turn-1",
+                "speaker": "opponent",
+                "status": "safe_reaction",
+                "text": "Давайте вернёмся к условиям работы и повышения. Что вы предлагаете?"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "model_error": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/turn",
+        "body": {
+          "snapshot": {
+            "session_id": "example-model-error",
+            "state": {
+              "turn_count": 0,
+              "stage": "negotiating"
+            },
+            "transcript": []
+          },
+          "turn_id": "turn-1",
+          "user_text": "Предлагаю продолжить разговор."
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "session_id": "example-model-error",
+          "turn_id": "turn-1",
+          "status": "model_error",
+          "opponent_text": "Сейчас не могу продолжить разговор. Попробуйте повторить ход.",
+          "snapshot": {
+            "session_id": "example-model-error",
+            "state": {
+              "turn_count": 0,
+              "stage": "negotiating"
+            },
+            "transcript": []
+          },
+          "error_code": "guard_unavailable"
+        }
+      }
+    },
+    "agreement_continues": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/turn",
+        "body": {
+          "snapshot": {
+            "session_id": "example-agreement-continues",
+            "state": {
+              "turn_count": 1,
+              "stage": "agreed",
+              "agreement": {
+                "control_weeks": 1,
+                "kpi_percent": 120,
+                "automatic_raise": true,
+                "employee_commitments": [
+                  "Компенсировать пропущенный день"
+                ],
+                "director_commitments": [
+                  "Повысить зарплату после выполнения KPI"
+                ]
+              }
+            },
+            "transcript": [
+              {
+                "turn_id": "turn-1",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Согласен."
+              },
+              {
+                "turn_id": "turn-1",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Договорились."
+              }
+            ]
+          },
+          "turn_id": "turn-2",
+          "user_text": "Продолжим обсуждение."
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "session_id": "example-agreement-continues",
+          "turn_id": "turn-2",
+          "status": "accepted",
+          "opponent_text": "Давайте согласуем измеримые условия.",
+          "snapshot": {
+            "session_id": "example-agreement-continues",
+            "state": {
+              "turn_count": 2,
+              "stage": "agreed",
+              "agreement": {
+                "control_weeks": 1,
+                "kpi_percent": 120,
+                "automatic_raise": true,
+                "employee_commitments": [
+                  "Компенсировать пропущенный день"
+                ],
+                "director_commitments": [
+                  "Повысить зарплату после выполнения KPI"
+                ]
+              }
+            },
+            "transcript": [
+              {
+                "turn_id": "turn-1",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Согласен."
+              },
+              {
+                "turn_id": "turn-1",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Договорились."
+              },
+              {
+                "turn_id": "turn-2",
+                "speaker": "player",
+                "status": "accepted",
+                "text": "Продолжим обсуждение."
+              },
+              {
+                "turn_id": "turn-2",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Давайте согласуем измеримые условия."
+              }
+            ]
+          }
+        }
+      }
+    },
+    "unauthorized": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/turn",
+        "headers": {},
+        "body": {
+          "snapshot": {
+            "session_id": "example-unauthorized",
+            "state": {
+              "turn_count": 0
+            },
+            "transcript": []
+          },
+          "turn_id": "turn-1",
+          "user_text": "Начнём разговор."
+        }
+      },
+      "response": {
+        "status_code": 401,
+        "body": {
+          "detail": "Unauthorized"
+        }
+      }
+    }
+  }
+}

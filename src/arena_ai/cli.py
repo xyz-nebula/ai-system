@@ -1,58 +1,44 @@
 """Terminal client for exercising the public AI service API."""
 
 import argparse
-import math
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 
+from arena_ai.cli_args import positive_timeout
 from arena_ai.contracts import (
     FinishResponse,
+    PreparationCard,
+    PreparationDuelComparison,
     ServiceInfo,
     SessionSnapshot,
     SessionState,
     TurnResponse,
 )
-
-DEMO_CASE = {
-    "id": "next-day",
-    "title": "На следующий день...",
-    "shared_context": (
-        "Результативный Менеджер по продажам договорился с Генеральным директором о повышении "
-        "зарплаты при выполнении KPI. На следующий день Менеджер не вышел на работу и сообщил "
-        "об отравлении. Директор сомневается в его готовности к большей ответственности."
-    ),
-    "player_role": "Менеджер",
-    "opponent_role": "Генеральный директор",
-    "player_private_context": (
-        "Сохранить договорённость о повышении и рабочие отношения. Готов компенсировать "
-        "последствия пропуска. Максимальная уступка — один контрольный месяц с заранее "
-        "согласованными KPI и автоматическим повышением после их выполнения."
-    ),
-    "opponent_private_context": (
-        "Добиться подтверждения ответственности Менеджера. Начать с предложения контрольного "
-        "месяца и KPI 130%; желательная сделка — две недели и KPI 120%. Не соглашаться "
-        "на повышение раньше одной контрольной недели."
-    ),
-    "opponent_private_phrases": ["желательная сделка", "не соглашаться на повышение"],
-    "agreement_rules": {
-        "min_control_weeks": 1,
-        "max_control_weeks": 4,
-        "min_kpi_percent": 100,
-        "max_kpi_percent": 130,
-        "require_automatic_raise": True,
-    },
-}
+from arena_ai.scenarios import NEXT_DAY_CASE
 
 
-def positive_timeout(value: str) -> float:
-    try:
-        seconds = float(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("Таймаут должен быть числом секунд") from error
-    if not math.isfinite(seconds) or seconds <= 0:
-        raise argparse.ArgumentTypeError("Таймаут должен быть положительным")
-    return seconds
+def load_preparation(path: Path | None) -> PreparationCard | None:
+    if path is None:
+        return None
+    preparation = PreparationCard.model_validate_json(path.read_text(encoding="utf-8"))
+    return preparation if preparation.has_content() else None
+
+
+def print_preparation_duel_comparison(comparison: PreparationDuelComparison) -> None:
+    status_labels = {
+        "followed": "По плану",
+        "adapted": "Адаптировано",
+        "not_observed": "Не проявилось",
+    }
+    print("Сопоставление подготовки с поединком:")
+    print(f"  {comparison.summary}")
+    for item in comparison.items:
+        print(f"  {status_labels[item.status]}: {item.preparation_text}")
+        print(f"    Наблюдение: {item.observation}")
+        if item.evidence_turn_id is not None:
+            print(f"    Эпизод ({item.evidence_turn_id}): «{item.evidence_quote}»")
 
 
 def main() -> None:
@@ -60,15 +46,22 @@ def main() -> None:
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
     parser.add_argument("--turn-timeout", type=positive_timeout, default=210.0)
     parser.add_argument("--finish-timeout", type=positive_timeout, default=300.0)
+    parser.add_argument("--preparation-file", type=Path)
     args = parser.parse_args()
+
+    try:
+        preparation = load_preparation(args.preparation_file)
+    except (OSError, ValueError):
+        print("Не удалось загрузить карточку подготовки.")
+        return
 
     snapshot = SessionSnapshot(
         session_id=str(uuid4()), state=SessionState(turn_count=0), transcript=[]
     )
-    print(f"Кейс: {DEMO_CASE['title']}")
-    print(f"\nОбщие вводные: {DEMO_CASE['shared_context']}")
-    print(f"\nВаша роль — {DEMO_CASE['player_role']}.")
-    print(f"Ваши вводные: {DEMO_CASE['player_private_context']}")
+    print(f"Кейс: {NEXT_DAY_CASE.title}")
+    print(f"\nОбщие вводные: {NEXT_DAY_CASE.shared_context}")
+    print(f"\nВаша роль — {NEXT_DAY_CASE.player_role}.")
+    print(f"Ваши вводные: {NEXT_DAY_CASE.player_private_context}")
     with httpx.Client(base_url=args.api_url, timeout=10.0) as client:
         try:
             info_response = client.get("/v1/info")
@@ -92,9 +85,15 @@ def main() -> None:
                 break
             if user_text == ":finish":
                 try:
+                    finish_body: dict[str, object] = {
+                        "case": NEXT_DAY_CASE.model_dump(mode="json"),
+                        "snapshot": snapshot.model_dump(mode="json"),
+                    }
+                    if preparation is not None:
+                        finish_body["preparation"] = preparation.filled_fields()
                     response = client.post(
                         "/v1/finish",
-                        json={"case": DEMO_CASE, "snapshot": snapshot.model_dump(mode="json")},
+                        json=finish_body,
                         timeout=args.finish_timeout,
                     )
                     response.raise_for_status()
@@ -137,6 +136,7 @@ def main() -> None:
                     verdict = slot.verdict
                     choice = "Менеджер" if verdict.choice == "player" else "Директор"
                     print(f"    Выбор: {choice}")
+                    print(f"    Решающий критерий: {verdict.decisive_criterion}")
                     print(
                         f"    Наблюдение ({verdict.evidence_turn_id}): "
                         f"«{verdict.evidence_quote}» — {verdict.observation}"
@@ -167,6 +167,9 @@ def main() -> None:
                             print(f"    Последствие: {point.consequence}")
                     for recommendation in feedback.next_try:
                         print(f"  Следующая попытка: {recommendation}")
+                    comparison = feedback.plan_vs_reality
+                    if comparison is not None:
+                        print_preparation_duel_comparison(comparison)
                 break
             if user_text == ":history":
                 if not snapshot.transcript:
@@ -183,7 +186,7 @@ def main() -> None:
                 response = client.post(
                     "/v1/turn",
                     json={
-                        "case": DEMO_CASE,
+                        "case": NEXT_DAY_CASE.model_dump(mode="json"),
                         "snapshot": snapshot.model_dump(mode="json"),
                         "turn_id": str(uuid4()),
                         "user_text": user_text,
