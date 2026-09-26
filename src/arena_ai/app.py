@@ -39,6 +39,7 @@ from arena_ai.contracts import (
     ValidationDecision,
     ValidatorRejectReason,
 )
+from arena_ai.judge_retrieval import DemoJudgeRetrieval, JudgeRetrieval, UnavailableJudgeRetrieval
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
 from arena_ai.opponent_position import (
@@ -530,6 +531,8 @@ def create_app(
     service_token: str | None = None,
     readiness_probe: ReadinessProbe | None = None,
     model_attempts: int = 1,
+    judge_retrieval: JudgeRetrieval | None = None,
+    owned_retrieval_http: httpx.AsyncClient | None = None,
 ) -> FastAPI:
     if not 1 <= model_attempts <= 3:
         raise ValueError("model_attempts must be between 1 and 3")
@@ -539,13 +542,19 @@ def create_app(
         try:
             yield
         finally:
-            if owned_model_http is not None:
-                await owned_model_http.aclose()
+            for owned in (owned_model_http, owned_retrieval_http):
+                if owned is not None:
+                    await owned.aclose()
 
     app = FastAPI(title="Arena AI", version="0.1.0", lifespan=lifespan)
     active_opponent = opponent if opponent is not None else DemoOpponent()
     active_judge = judge if judge is not None else DemoJudge()
     active_trainer = trainer if trainer is not None else DemoTrainer()
+    active_retrieval = (
+        judge_retrieval
+        if judge_retrieval is not None
+        else (DemoJudgeRetrieval() if mode == "demo" else UnavailableJudgeRetrieval())
+    )
 
     async def require_service_token(
         credentials: Annotated[
@@ -842,6 +851,7 @@ def create_app(
                 request.snapshot,
                 outcome,
                 active_judge,
+                active_retrieval,
                 model_attempts,
             ),
             trainer_feedback=await train_duel(
@@ -857,7 +867,10 @@ def create_app(
     return app
 
 
-def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAPI:
+def create_configured_app(
+    model_http: httpx.AsyncClient | None = None,
+    retrieval_http: httpx.AsyncClient | None = None,
+) -> FastAPI:
     mode = os.environ.get("ARENA_MODEL_MODE", "demo")
     service_token = os.environ.get("ARENA_SERVICE_TOKEN") or None
     if mode == "demo":
@@ -867,7 +880,7 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
 
     from arena_ai.runtime import build_qwen_runtime
 
-    runtime = build_qwen_runtime(model_http)
+    runtime = build_qwen_runtime(model_http, retrieval_http)
     return create_app(
         opponent=runtime.opponent,
         guard=runtime.guard,
@@ -880,6 +893,8 @@ def create_configured_app(model_http: httpx.AsyncClient | None = None) -> FastAP
         service_token=service_token,
         readiness_probe=runtime.readiness,
         model_attempts=runtime.model_attempts,
+        judge_retrieval=runtime.retrieval,
+        owned_retrieval_http=runtime.owned_retrieval_http,
     )
 
 

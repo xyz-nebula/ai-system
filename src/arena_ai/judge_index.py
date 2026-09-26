@@ -39,7 +39,10 @@ def _embedding(client: httpx.Client, url: str, text: str) -> list[float]:
         json={"inputs": [text], "truncate": False},
     )
     response.raise_for_status()
-    body = response.json()
+    return parse_embedding_response(response.json())
+
+
+def parse_embedding_response(body: object) -> list[float]:
     if not isinstance(body, list) or len(body) != 1 or not isinstance(body[0], list):
         raise ValueError("invalid embeddings response")
     vector = body[0]
@@ -82,14 +85,14 @@ def _ensure_collection(client: httpx.Client, url: str, dimension: int) -> None:
         schema = result.get("payload_schema", {})
         if not isinstance(schema, dict):
             raise ValueError("invalid judge payload schema")
-        for field in ("purpose", "corpus_id", "scope", "colleges"):
+        for field in ("purpose", "corpus_id", "scope", "colleges", "corpus_version"):
             if field in schema and (
                 not isinstance(schema[field], dict) or schema[field].get("data_type") != "keyword"
             ):
                 raise ValueError("existing judge payload index is incompatible")
         indexed_fields = set(schema)
 
-    for field in ("purpose", "corpus_id", "scope", "colleges"):
+    for field in ("purpose", "corpus_id", "scope", "colleges", "corpus_version"):
         if field not in indexed_fields:
             index = client.put(
                 f"{url}/index",

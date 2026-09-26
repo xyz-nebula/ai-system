@@ -124,7 +124,7 @@ def test_index_is_idempotent_and_each_college_retrieves_only_its_reviewed_chunks
     _index(fake)
     assert fake.points == first
     assert set(fake.points) == {point_id(chunk) for chunk in CHUNKS}
-    assert set(fake.indexes) == {"purpose", "corpus_id", "scope", "colleges"}
+    assert set(fake.indexes) == {"purpose", "corpus_id", "scope", "colleges", "corpus_version"}
     with httpx.Client(transport=httpx.MockTransport(fake)) as client:
         counts = verify_index(client, qdrant_url=QDRANT_URL)
     assert counts == {college: len(chunks_for_college(college)) for college in ALL_COLLEGES}
@@ -195,10 +195,11 @@ def test_invalid_embeddings_fail_before_any_qdrant_mutation(reply: object) -> No
     assert fake.requests == []
 
 
-def test_incompatible_existing_payload_index_is_not_overwritten() -> None:
+@pytest.mark.parametrize("field", ["colleges", "corpus_version"])
+def test_incompatible_existing_payload_index_is_not_overwritten(field: str) -> None:
     fake = MemoryRag()
     _index(fake)
-    fake.indexes["colleges"] = {"data_type": "integer"}
+    fake.indexes[field] = {"data_type": "integer"}
     fake.requests.clear()
     with pytest.raises(ValueError, match="payload index is incompatible"):
         _index(fake)

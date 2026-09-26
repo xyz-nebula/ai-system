@@ -76,6 +76,10 @@ def running_ai_service(model_id: str = "qwen-black-box") -> Iterator[str]:
                 "ARENA_QWEN_FAST_EXTRA_BODY": "{}",
                 "ARENA_QWEN_REASONED_EXTRA_BODY": "{}",
                 "ARENA_SERVICE_TOKEN": SERVICE_TOKEN,
+                "ARENA_QDRANT_URL": f"http://127.0.0.1:{gateway_port}",
+                "ARENA_EMBEDDINGS_URL": f"http://127.0.0.1:{gateway_port}",
+                "ARENA_JUDGE_COLLECTION": "arena_judge_methodology_v1",
+                "ARENA_RETRIEVAL_TIMEOUT_SECONDS": "2",
             }
         )
         environment.pop("ARENA_QWEN_MODELS_URL", None)

@@ -6,6 +6,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
+from arena_ai.judge_corpus import CHUNKS
+from arena_ai.judge_index import point_id
+
 MODEL_ID = "qwen-black-box"
 FAILURE_MODEL_ID = "qwen-black-box-failing-finish"
 
@@ -35,6 +38,37 @@ class FakeOpenAIHandler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.NOT_FOUND, {"error": {"message": "not found"}})
 
     def do_POST(self) -> None:
+        path = urlsplit(self.path).path
+        if path == "/embed" or path.endswith(("/points/scroll", "/points/query")):
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length))
+            if path == "/embed":
+                self.send_json(HTTPStatus.OK, [[1.0, 0.5, 0.25]])
+                return
+            selected = []
+            for chunk in CHUNKS:
+                payload = chunk.payload()
+                matches = True
+                for condition in body["filter"]["must"]:
+                    value = payload[condition["key"]]
+                    allowed = condition["match"].get("any", [condition["match"].get("value")])
+                    matches = matches and (
+                        any(item in allowed for item in value)
+                        if isinstance(value, list)
+                        else value in allowed
+                    )
+                if matches:
+                    selected.append({"id": point_id(chunk), "payload": payload})
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "result": {
+                        "points": selected[: body["limit"]],
+                        "next_page_offset": None,
+                    }
+                },
+            )
+            return
         if urlsplit(self.path).path != "/v1/chat/completions":
             self.send_json(HTTPStatus.NOT_FOUND, {"error": {"message": "not found"}})
             return

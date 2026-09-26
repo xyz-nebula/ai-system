@@ -423,6 +423,14 @@ class ValidationDecision(Contract):
         return self
 
 
+class JudgeMethodology(Contract):
+    """Internal text-only support; provenance is deliberately absent from model context."""
+
+    core: list[str]
+    profile: list[str]
+    techniques: list[str]
+
+
 class JudgeContext(Contract):
     college: JudgeCollege
     rubric: str
@@ -434,6 +442,7 @@ class JudgeContext(Contract):
     state: PublicSessionState
     transcript: list[TranscriptEntry]
     outcome: OutcomeResult
+    methodology: JudgeMethodology
 
 
 class JudgeVerdict(Contract):
@@ -451,7 +460,15 @@ class JudgeSlot(Contract):
     college: JudgeCollege
     status: Literal["ready", "failed"]
     verdict: JudgeVerdict | None = None
-    error_code: Literal["judge_unavailable", "invalid_judge_output"] | None = None
+    error_code: (
+        Literal[
+            "judge_unavailable",
+            "invalid_judge_output",
+            "judge_retrieval_unavailable",
+            "invalid_judge_retrieval",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def result_matches_status(self) -> Self:

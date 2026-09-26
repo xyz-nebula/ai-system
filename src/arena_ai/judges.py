@@ -13,6 +13,9 @@ from arena_ai.contracts import (
     OutcomeResult,
     SessionSnapshot,
 )
+from arena_ai.judge_corpus import CHUNKS, SOURCES
+from arena_ai.judge_index import point_id
+from arena_ai.judge_retrieval import InvalidRetrievalError, JudgeRetrieval, methodology_for_college
 from arena_ai.model_recovery import validated_model_call
 from arena_ai.privacy import contains_private_phrase, public_duel_view
 
@@ -58,7 +61,7 @@ CRITERIA: dict[JudgeCollege, tuple[str, ...]] = {
 }
 MAX_VERDICT_WORDS = 120
 SOURCE_REFERENCE = re.compile(
-    r"https?://|www\.|\b(?:методич\w*|источник\w*|страниц\w*|стр\.\s*\d+|"
+    r"https?://|www\.|\b(?:методич\w*|методик\w*|источник\w*|страниц\w*|стр\.\s*\d+|"
     r"rag|qdrant|doi|pdf|methodology|retrieval|source|page|citation)\b",
     re.IGNORECASE,
 )
@@ -132,9 +135,41 @@ def verdict_is_grounded(verdict: JudgeVerdict, context: JudgeContext, case: Case
         SOURCE_REFERENCE.search(visible_text)
         or COACHING_LANGUAGE.search(reasoning_text)
         or GENERIC_COMMENT.search(reasoning_text)
+        or contains_internal_support(visible_text, context)
     ):
         return False
     return not contains_private_phrase(visible_text, case)
+
+
+def contains_internal_support(text: str, context: JudgeContext) -> bool:
+    lowered = text.casefold()
+    if any(
+        token in lowered
+        for chunk in CHUNKS
+        for token in (chunk.chunk_id, chunk.text_sha256, point_id(chunk))
+    ):
+        return True
+    for source in SOURCES.values():
+        title = re.sub(r"^\d+\.\s*", "", source.pdf_name.removesuffix(".pdf")).replace("_", " ")
+        if (
+            source.path.casefold() in lowered
+            or source.pdf_sha256 in lowered
+            or (len(title.split()) > 1 and title.casefold() in lowered)
+        ):
+            return True
+    public_words = f" {' '.join(re.findall(r'\w+', lowered))} "
+    for excerpt in (
+        *context.methodology.core,
+        *context.methodology.profile,
+        *context.methodology.techniques,
+    ):
+        words = re.findall(r"\w+", excerpt.casefold())
+        if any(
+            f" {' '.join(words[start : start + 10])} " in public_words
+            for start in range(len(words) - 9)
+        ):
+            return True
+    return False
 
 
 def validated_judge_verdict(
@@ -155,11 +190,26 @@ async def judge_duel(
     snapshot: SessionSnapshot,
     outcome: OutcomeResult,
     judge: Judge,
+    retrieval: JudgeRetrieval,
     model_attempts: int = 1,
 ) -> list[JudgeSlot]:
     public_view = public_duel_view(snapshot)
     slots: list[JudgeSlot] = []
     for college in COLLEGES:
+        try:
+            methodology = methodology_for_college(await retrieval.retrieve(college), college)
+        except InvalidRetrievalError:
+            slots.append(
+                JudgeSlot(college=college, status="failed", error_code="invalid_judge_retrieval")
+            )
+            continue
+        except Exception:  # noqa: BLE001 - isolate retrieval transport per college
+            slots.append(
+                JudgeSlot(
+                    college=college, status="failed", error_code="judge_retrieval_unavailable"
+                )
+            )
+            continue
         context = JudgeContext(
             college=college,
             rubric=RUBRICS[college],
@@ -171,6 +221,7 @@ async def judge_duel(
             state=public_view.state,
             transcript=public_view.transcript,
             outcome=outcome,
+            methodology=methodology,
         )
         verdict_result = await validated_model_call(
             partial(judge.verdict, context),

@@ -424,7 +424,9 @@
               {
                 "enum": [
                   "judge_unavailable",
-                  "invalid_judge_output"
+                  "invalid_judge_output",
+                  "judge_retrieval_unavailable",
+                  "invalid_judge_retrieval"
                 ],
                 "type": "string"
               },

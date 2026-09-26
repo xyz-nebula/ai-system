@@ -100,6 +100,10 @@ async def test_one_endpoint_serves_isolated_qwen_roles_through_public_api() -> N
             assert "decisive_criterion" in system
             assert "не длиннее 120 слов" in system
             assert "Не давай советов" in system
+            assert "техники не являются счётчиком навыков" in system
+            assert context["methodology"]["core"]
+            assert context["methodology"]["profile"]
+            assert "source_path" not in json.dumps(context["methodology"])
             return completion(
                 {
                     "college": context["college"],
