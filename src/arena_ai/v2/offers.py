@@ -9,7 +9,9 @@ from arena_ai.v2.contracts import (
     AppliedTransition,
     Contract,
     DealTerms,
+    DeferredDecision,
     Evidence,
+    PartialDecision,
     Progress,
     Text,
     TurnRequest,
@@ -35,7 +37,7 @@ class OpponentOffer(Contract):
     text: Text
     terms: DealTerms | None
     position_transition: PositionTransition | None
-    resolution: AgreementClaim | None = None
+    resolution: AgreementClaim | PartialDecision | DeferredDecision | None = None
 
 
 class OfferAssessment(Contract):
@@ -100,6 +102,11 @@ def check_offer(
     if offer.terms is not None:
         visible += [item.value for item in offer.terms.values if isinstance(item.value, str)]
         visible += [item.text for item in offer.terms.commitments]
+    if isinstance(offer.resolution, PartialDecision):
+        visible += [item.text for item in offer.resolution.commitments]
+        visible += offer.resolution.open_points
+    elif isinstance(offer.resolution, DeferredDecision):
+        visible += [offer.resolution.reason, offer.resolution.next_step]
     private = [
         request.case.player.private_context,
         request.case.opponent.private_context,

@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from typing import Literal
 
 import httpx
 
@@ -68,6 +69,44 @@ async def evaluate_agreement(
     report["scope"] = "v2-full-agreement-probe"
     report["passed"] = report["passed"] and report["stage"] == "agreed"
     return report
+
+
+async def evaluate_decision(
+    http: httpx.AsyncClient,
+    settings: QwenSettings,
+    base: TurnRequest,
+    *,
+    kind: Literal["partial_agreement", "deferred"],
+) -> dict[str, object]:
+    """Expected mutual decision on a synthetic case; not finish or expert acceptance."""
+    if base.case.id != "demo-supply-v2":
+        raise ValueError("This probe requires the authored supply example")
+    data = base.model_dump(mode="python")
+    data["user_text"] = (
+        "Согласен зафиксировать частичную договорённость: я обязуюсь прислать перечень "
+        "товаров. Цену и срок пока не согласовали, обсудим их позже."
+        if kind == "partial_agreement"
+        else "Согласен перенести обсуждение: мне нужно уточнить бюджет. "
+        "Я уточню бюджет и вернусь к обсуждению условий. Зафиксируем этот следующий шаг."
+    )
+    turn = TurnRequest.model_validate(data)
+    response = await QwenTurnPipeline(http, settings).turn(turn)
+    decision = response.snapshot.state.decision
+    return {
+        "scope": f"v2-{kind}-probe",
+        "model": settings.model,
+        "case_id": turn.case.id,
+        "status": response.status,
+        "error_code": response.error_code,
+        "stage": response.snapshot.state.stage,
+        "passed": response.status == "accepted"
+        and response.snapshot.revision == turn.snapshot.revision + 1
+        and response.snapshot.state.stage == kind
+        and decision is not None
+        and decision.kind == kind
+        and response.snapshot.state.agreement is None
+        and response.snapshot.round == turn.snapshot.round,
+    }
 
 
 async def evaluate_validator(
@@ -155,7 +194,11 @@ async def evaluate_validator(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path, help="supply-turn.request.json")
-    parser.add_argument("--mode", choices=("validator", "turn", "agreement"), default="validator")
+    parser.add_argument(
+        "--mode",
+        choices=("validator", "turn", "agreement", "partial_agreement", "deferred"),
+        default="validator",
+    )
     parser.add_argument("--scenario", choices=[name for name, _, _ in SCENARIOS], action="append")
     args = parser.parse_args()
     if args.scenario and args.mode != "validator":
@@ -175,6 +218,8 @@ def main() -> None:
                     request,
                     scenario_names=set(args.scenario) if args.scenario else None,
                 )
+            if args.mode in ("partial_agreement", "deferred"):
+                return await evaluate_decision(http, settings, request, kind=args.mode)
             evaluator = evaluate_turn if args.mode == "turn" else evaluate_agreement
             return await evaluator(http, settings, request)
 

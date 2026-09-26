@@ -101,7 +101,11 @@ class QwenAgreementValidator:
     ) -> AgreementAssessment:
         try:
             checked = check_offer(request, offer, offer_assessment)
-            if offer.resolution is None or checked.terms is None:
+            if (
+                offer.resolution is None
+                or offer.resolution.kind != "agreement"
+                or checked.terms is None
+            ):
                 raise ValueError("Agreement claim needs checked full terms")
             try:
                 require_unconditional_own_acceptance(request.user_text)

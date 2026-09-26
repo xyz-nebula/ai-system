@@ -604,6 +604,15 @@ class SessionSnapshot(Contract):
                 if progress
                 else case.opponent_strategy.steps[0].id,
             )
+        if isinstance(self.state.decision, PartialDecision):
+            commitments = self.state.decision.commitments
+            if any(
+                item.role_id not in {case.player.role_id, case.opponent.role_id}
+                for item in commitments
+            ):
+                raise ValueError("Partial commitment belongs to inactive role")
+            if len({(item.role_id, item.text) for item in commitments}) != len(commitments):
+                raise ValueError("Duplicate partial commitments")
 
     @model_validator(mode="after")
     def consistent_history(self) -> Self:

@@ -14,6 +14,65 @@ def agreed_turn() -> TurnRequest:
     return TurnRequest.model_validate(data)
 
 
+def test_full_agreement_cannot_silently_drop_earlier_partial_commitment():
+    from arena_ai.v2.agreements import (
+        AgreementAssessment,
+        CommitmentProof,
+        RuleProof,
+        check_agreement,
+    )
+
+    data = agreed_turn().model_dump(mode="python")
+    data["snapshot"]["state"].update(
+        stage="partial_agreement",
+        decision={
+            "kind": "partial_agreement",
+            "commitments": [{"role_id": "buyer", "text": "Передать список адресов"}],
+            "open_points": ["Цена"],
+        },
+    )
+    turn = TurnRequest.model_validate(data)
+    offer = OpponentOffer.model_validate(
+        {
+            "text": "Согласен. Поставлю товар за 14 дней, вы оплачиваете по 5000 рублей за единицу.",
+            "terms": turn.case.opponent_strategy.steps[0].terms.model_dump(mode="python"),
+            "position_transition": None,
+            "resolution": {"kind": "agreement"},
+        }
+    )
+    player = Evidence(
+        message_id=turn.user_message_id,
+        turn_id=turn.turn_id,
+        speaker="player",
+        elapsed_ms=turn.user_elapsed_ms,
+        quote=turn.user_text,
+    )
+    opponent = Evidence(
+        message_id=turn.opponent_message_id,
+        turn_id=turn.turn_id,
+        speaker="opponent",
+        elapsed_ms=turn.user_elapsed_ms,
+        quote=offer.text,
+    )
+    assessment = AgreementAssessment(
+        decision="accept",
+        player_acceptance=player,
+        opponent_acceptance=opponent,
+        commitment_proofs=[
+            CommitmentProof(commitment_index=0, evidence=opponent),
+            CommitmentProof(commitment_index=1, evidence=player),
+        ],
+        rule_proofs=[RuleProof(rule_id="explicit-player-commitment", evidence=player)],
+    )
+    with pytest.raises(ValueError, match="partial commitments"):
+        check_agreement(
+            turn,
+            offer,
+            OfferAssessment(decision="accept", terms_match_text=True, concession_proofs=[]),
+            assessment,
+        )
+
+
 def test_complete_mutual_agreement_requires_all_commitments_and_authored_rules() -> None:
     from arena_ai.v2.agreements import (
         AgreementAssessment,

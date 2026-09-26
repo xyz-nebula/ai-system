@@ -30,6 +30,8 @@ uv run python -m arena_ai.v2.live_eval docs/api/v2/examples/supply-turn.request.
 uv run python -m arena_ai.v2.live_eval --mode turn docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode turn docs/api/v2/examples/next-day-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode agreement docs/api/v2/examples/supply-turn.request.json
+uv run python -m arena_ai.v2.live_eval --mode partial_agreement docs/api/v2/examples/supply-turn.request.json
+uv run python -m arena_ai.v2.live_eval --mode deferred docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --scenario repeat docs/api/v2/examples/supply-turn.request.json
 ```
 
@@ -58,7 +60,9 @@ Agreement probe проверяет полный кандидат сделки с
 успехом этой проверки. Сделка не закрывает round. В живом прогоне найдена путаница
 индексов обязательств; модель получает явный catalogue с индексом, role_id и speaker,
 но неверные доказательства не исправляются автоматически.
-Это не полная сессия: partial/deferred, finish, три судьи и Trainer
+Partial/deferred probes требуют соответствующего stage/decision, revision+1,
+agreement=null и неизменного открытого round, а не просто accepted-реплики.
+Это не полная сессия: finish, три судьи и Trainer
 v2 ещё не включены. Backend commit/CAS/deadline и интеграция с другими сервисами
 также не проверяются этой командой.
 
@@ -87,3 +91,23 @@ Evidence. Gate не разрешил уступку. После уточнени
 сценария вернул reject. Это подтверждает исправление конкретного сбоя, не гарантирует
 стабильность всех ответов модели; полную live/expert приёмку ещё предстоит выполнить.
 После этого уточнения полный повтор Validator probe также прошёл 7/7.
+
+Следующий срез partial/deferred проверяется через model HTTP seam с заданными
+ответами: взаимность текущей пары, роли каждого обязательства, сохранение прежних
+обязательств, продолжение открытого round, fail-closed при неверной Evidence,
+JSON/HTTP ошибках и утечке в полях решения. Это не доказательство качества LLM.
+
+Живой partial probe пока НЕ прошёл: несколько управляемых прогонов вернули
+opponent_model_error с неизменным снимком. Диагностический прогон получил HTTP 200,
+finish_reason=length и пустой content; отдельный вызов Opponent также давал валидный
+JSON, поэтому стабильно воспроизводимой минимальной причины всех отказов пока нет.
+Увеличение fast max_tokens с 1800 до 4096 и устранение противоречия между полной
+и частичной фиксацией не обеспечили успешный полный прогон. json_object режим дал
+guard_model_error, поэтому не включён как исправление. Неверные ответы не чинятся
+автоматически и не коммитятся. Перед включением HTTP v2 требуется стабилизировать
+модельный путь и повторить эти сценарии; schema/test pass не заменяет live pass.
+
+Отдельный живой deferred probe прошёл: accepted, stage=deferred, passed=true;
+проверяется также revision+1, agreement=null и неизменный открытый round.
+Локальный набор этого среза — 582 passed; Ruff/format/ty и проверка rc.1 артефактов
+прошли. Это не отменяет неуспешный partial probe и не является общей приёмкой v2.

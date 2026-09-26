@@ -1,4 +1,4 @@
-"""Checked candidate turns and full agreement; partial/deferred remain a later slice."""
+"""Checked candidate turns with mutual full, partial and deferred decisions."""
 
 from typing import Literal, Self
 
@@ -7,18 +7,21 @@ from pydantic import model_validator
 
 from arena_ai.qwen import QwenSettings
 from arena_ai.v2.agreement_validator import AgreementValidationError, QwenAgreementValidator
-from arena_ai.v2.agreements import check_agreement
+from arena_ai.v2.agreements import check_agreement, check_decision
 from arena_ai.v2.chat import JsonChat, ModelResponseError
 from arena_ai.v2.contexts import for_guard, for_opponent
 from arena_ai.v2.contracts import (
     Contract,
     DealTerms,
+    DeferredDecision,
+    PartialDecision,
     Progress,
     SessionSnapshot,
     TranscriptEntry,
     TurnRequest,
     TurnResponse,
 )
+from arena_ai.v2.decision_validator import DecisionValidationError, QwenDecisionValidator
 from arena_ai.v2.offers import OpponentOffer, check_offer
 from arena_ai.v2.validator import OfferValidationError, QwenOfferValidator
 
@@ -78,16 +81,29 @@ position_transition=null. ID из agreement_policy.required_commitment_ids НЕ 
 требованиями перехода; бери requirement_ids только из requires следующей ступени.
 Пример структуры вопроса без пакета условий и без перехода:
 {"text":"Какое встречное предложение вы готовы обсудить?","terms":null,"position_transition":null}
-Предложение ещё не является взаимной договорённостью. resolution=null, пока нет
-явного безусловного согласия обеих сторон на полный одинаковый пакет и всех
-обязательств. Если пользователь явно принял пакет, ты также принимаешь его,
+Предложение ещё не является взаимной договорённостью. Для ПОЛНОЙ сделки kind=agreement
+нужно явное безусловное согласие обеих сторон на полный одинаковый пакет и все
+обязательства. Если пользователь явно принял пакет, ты также принимаешь его,
 выполнены mandatory commitment rules, верни resolution={"kind":"agreement"}
 и полный terms; публичный текст должен явно подтверждать этот же пакет.
 Не объявляй согласие по одному «ну да», если его предмет неоднозначен.
-При условном согласии, вопросе, отказе или отсутствии обязательства resolution=null;
-не говори «договорились». Сделка не завершает раунд: продолжай обсуждение.
+При условном согласии, вопросе или отказе resolution=null. Отсутствие обязательного
+элемента ПОЛНОЙ сделки запрещает kind=agreement, но не подтверждённое partial/deferred.
+Не говори «полностью договорились» без полной сделки. Не завершай раунд.
 Если state уже agreed и новых условий нет, resolution=null, прежняя сделка
-сохраняется. Частичную сделку и перенос обсуждения пока не подтверждай как итог.
+сохраняется. Частичное решение допустимо только с явно принятыми обязательствами
+активных ролей и оставшимися нерешёнными вопросами:
+resolution={"kind":"partial_agreement","commitments":[{"role_id":"ROLE_ID",
+"text":"Конкретное обязательство"}],"open_points":["Нерешённый вопрос"]}.
+Для взаимного переноса обсуждения используй resolution={"kind":"deferred",
+"reason":"Обсуждённая причина","next_step":"Принятый следующий шаг"}.
+Односторонняя заминка не является переносом. Не выдумывай обязательства и причины.
+В публичном тексте явно подтверди ТО ЖЕ решение; каждый нерешённый вопрос назови.
+Частичная договорённость и перенос не означают конец раунда. Не стирай уже
+согласованные обязательства; полную сделку нельзя заменить partial/deferred.
+Если новая взаимная фиксация отсутствует, resolution=null и прежнее состояние
+сохраняется. Для числовых условий даже частичного решения нужен полный terms,
+проверяемый по текущим границам; terms не означает, что весь пакет уже принят.
 Верни только JSON OpponentOffer, без служебных пояснений.
 """
 
@@ -104,6 +120,7 @@ class QwenTurnPipeline:
         )
         self.validator = QwenOfferValidator.from_settings(http, settings)
         self.agreement_validator = QwenAgreementValidator(http, settings)
+        self.decision_validator = QwenDecisionValidator(http, settings)
 
     async def turn(self, request: TurnRequest) -> TurnResponse:
         error = "guard_model_error"
@@ -122,12 +139,19 @@ class QwenTurnPipeline:
             assessment = await self.validator.assess(request, offer)
             checked = check_offer(request, offer, assessment)
             agreement = None
-            if offer.resolution is not None:
+            decision = None
+            if offer.resolution is not None and offer.resolution.kind == "agreement":
                 error = "agreement_validation_failed"
                 agreement_assessment = await self.agreement_validator.assess(
                     request, offer, assessment
                 )
                 agreement = check_agreement(request, offer, assessment, agreement_assessment)
+            elif offer.resolution is not None:
+                error = "decision_validation_failed"
+                decision_assessment = await self.decision_validator.assess(
+                    request, offer, assessment
+                )
+                decision = check_decision(request, offer, assessment, decision_assessment)
             return self._candidate(
                 request,
                 checked.text,
@@ -135,8 +159,15 @@ class QwenTurnPipeline:
                 None,
                 checked.opponent_progress,
                 agreement,
+                decision,
             )
-        except (ModelResponseError, OfferValidationError, AgreementValidationError, ValueError):
+        except (
+            ModelResponseError,
+            OfferValidationError,
+            AgreementValidationError,
+            DecisionValidationError,
+            ValueError,
+        ):
             return self._error(request, error)
 
     def _error(self, request: TurnRequest, code: str) -> TurnResponse:
@@ -164,6 +195,7 @@ class QwenTurnPipeline:
         | None,
         progress: Progress | None,
         agreement: DealTerms | None = None,
+        decision: PartialDecision | DeferredDecision | None = None,
     ) -> TurnResponse:
         data = request.snapshot.model_dump(mode="python")
         data["revision"] += 1
@@ -173,6 +205,10 @@ class QwenTurnPipeline:
         if agreement is not None:
             data["state"].update(
                 stage="agreed", agreement=agreement.model_dump(mode="python"), decision=None
+            )
+        elif decision is not None:
+            data["state"].update(
+                stage=decision.kind, agreement=None, decision=decision.model_dump(mode="python")
             )
         for message_id, speaker, entry_status, entry_text, entry_reason in (
             (request.user_message_id, "player", status, request.user_text, reason),

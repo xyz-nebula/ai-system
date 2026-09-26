@@ -1,11 +1,19 @@
-"""Read-only full-deal gate: a proposal is not a mutual agreement."""
+"""Read-only resolution gates: a proposal is not a mutual agreement or decision."""
 
 import re
 from typing import Annotated, Literal
 
 from pydantic import Field
 
-from arena_ai.v2.contracts import Contract, DealTerms, Evidence, Text, TurnRequest
+from arena_ai.v2.contracts import (
+    Contract,
+    DealTerms,
+    DeferredDecision,
+    Evidence,
+    PartialDecision,
+    Text,
+    TurnRequest,
+)
 from arena_ai.v2.offers import OfferAssessment, OpponentOffer, check_offer
 
 
@@ -89,7 +97,12 @@ def check_agreement(
     assessment: AgreementAssessment,
 ) -> DealTerms:
     checked = check_offer(request, offer, offer_assessment)
-    if offer.resolution is None or checked.terms is None or assessment.decision != "accept":
+    if (
+        offer.resolution is None
+        or offer.resolution.kind != "agreement"
+        or checked.terms is None
+        or assessment.decision != "accept"
+    ):
         raise ValueError(
             "Full agreement requires an explicit checked package and certain assessment"
         )
@@ -126,4 +139,71 @@ def check_agreement(
         speaker = "player" if rules[rule_id].role_id == request.case.player.role_id else "opponent"
         if not _evidence_is_grounded(evidence, request, offer, speaker):
             raise ValueError("Mandatory commitment rule has invalid role-grounded evidence")
+    previous = request.snapshot.state.decision
+    if isinstance(previous, PartialDecision) and not {
+        (item.role_id, item.text) for item in previous.commitments
+    } <= {(item.role_id, item.text) for item in checked.terms.commitments}:
+        raise ValueError("Existing partial commitments cannot be silently removed")
     return checked.terms.model_copy(deep=True)
+
+
+class DecisionAssessment(Contract):
+    decision: Literal["accept", "reject", "uncertain"]
+    player_acceptance: Evidence | None
+    opponent_acceptance: Evidence | None
+    commitment_proofs: list[CommitmentProof]
+
+
+def check_decision(
+    request: TurnRequest,
+    offer: OpponentOffer,
+    offer_assessment: OfferAssessment,
+    assessment: DecisionAssessment,
+) -> PartialDecision | DeferredDecision:
+    """Check a mutual decision without promoting it to a full package."""
+    check_offer(request, offer, offer_assessment)
+    claim = offer.resolution
+    if (
+        not isinstance(claim, (PartialDecision, DeferredDecision))
+        or assessment.decision != "accept"
+    ):
+        raise ValueError("Decision requires a certain explicit assessment")
+    if request.snapshot.state.agreement is not None:
+        raise ValueError("Decision cannot overwrite a full agreement")
+    for speaker, evidence in (
+        ("player", assessment.player_acceptance),
+        ("opponent", assessment.opponent_acceptance),
+    ):
+        if evidence is None or not _evidence_is_grounded(
+            evidence, request, offer, speaker, current=True
+        ):
+            raise ValueError("Decision requires current mutual acceptance evidence")
+        require_unconditional_own_acceptance(evidence.quote)
+    if isinstance(claim, DeferredDecision):
+        if assessment.commitment_proofs or isinstance(
+            request.snapshot.state.decision, PartialDecision
+        ):
+            raise ValueError("Deferral cannot erase partial commitments or carry package proofs")
+        return claim.model_copy(deep=True)
+    commitments = {(item.role_id, item.text) for item in claim.commitments}
+    roles = {request.case.player.role_id, request.case.opponent.role_id}
+    if len(commitments) != len(claim.commitments) or any(
+        role not in roles for role, _ in commitments
+    ):
+        raise ValueError("Partial commitments must be unique and belong to active roles")
+    proofs = {item.commitment_index: item.evidence for item in assessment.commitment_proofs}
+    if set(proofs) != set(range(len(claim.commitments))) or len(proofs) != len(
+        assessment.commitment_proofs
+    ):
+        raise ValueError("Every partial commitment requires exactly one proof")
+    for index, commitment in enumerate(claim.commitments):
+        speaker = "player" if commitment.role_id == request.case.player.role_id else "opponent"
+        if not _evidence_is_grounded(proofs[index], request, offer, speaker):
+            raise ValueError("Partial commitment has invalid role-grounded evidence")
+    previous = request.snapshot.state.decision
+    if (
+        isinstance(previous, PartialDecision)
+        and not {(item.role_id, item.text) for item in previous.commitments} <= commitments
+    ):
+        raise ValueError("Existing partial commitments cannot be silently removed")
+    return claim.model_copy(deep=True)

@@ -1,9 +1,26 @@
 import asyncio
 
 import httpx
+import pytest
 from test_v2_turn import request, settings
 
 from arena_ai.v2.live_eval import evaluate_validator
+
+
+@pytest.mark.parametrize("kind", ["partial_agreement", "deferred"])
+def test_decision_probe_does_not_count_model_error_as_success(kind):
+    from arena_ai.v2.live_eval import evaluate_decision
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(503))
+        ) as http:
+            return await evaluate_decision(http, settings(), request(), kind=kind)
+
+    report = asyncio.run(run())
+    assert report["passed"] is False
+    assert report["status"] == "model_error"
+    assert report["stage"] == "negotiating"
 
 
 def test_live_probe_does_not_count_model_errors_as_successful_rejections(capsys) -> None:
