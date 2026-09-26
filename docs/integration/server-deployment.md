@@ -5,9 +5,9 @@
 остаётся открытым. Изменяются только `ai-system` и его контейнер; чужие сервисы не меняются.
 
 26 сентября 2026 минимальный живой smoke прошёл: принятый ход, настоящий retrieval,
-три ready судьи и ready Trainer. [Безопасный отчёт](../../.scratch/server-integration/reports/2026-09-26-live-smoke.json).
-Релиз: `arena-ai:f4e50d251aae`; источники/compose на сервере:
-`/home/farrahovd234/arena-ai/releases/f4e50d251aae`, защищённый env в `shared/.env`.
+три ready судьи и ready Trainer. Это не полный adversarial или командный e2e.
+Детальные отчёты и идентификаторы разовых deployment bundles хранятся у оператора,
+не в опубликованном репозитории.
 
 ## Адреса и границы
 

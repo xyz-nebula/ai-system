@@ -48,8 +48,16 @@ docker compose -f deploy/rag/compose.yaml ps
 ```
 
 Порты Qdrant `6333` и TEI `8081` остаются на loopback. Для локальной индексации использовать
-SSH-туннель из раздела «Qdrant и Qwen3 Embeddings» в README. На локальной машине с исходными
-методичками, пока туннель открыт:
+SSH-туннель к loopback-портам сервера:
+
+```bash
+ssh -N -T -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:6333:127.0.0.1:6333 \
+  -L 127.0.0.1:8081:127.0.0.1:8081 \
+  -p <ssh-port> <ssh-user>@<ssh-host>
+```
+
+На локальной машине с исходными методичками, пока туннель открыт:
 
 ```bash
 uv run python scripts/check_rag_stack.py

@@ -32,6 +32,9 @@ htmlcov/
 .DS_Store
 
 # Local copies and agent runtime state
+/.scratch/
+/.secrets/
+/docs/integration/team-messages.md
 /knowledge-base/
 /dev-context.md
 /.agents/
