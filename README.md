@@ -150,6 +150,7 @@ Qwen, но сквозная интеграция Backend/Frontend/Audio Engine �
 
 ## Документация
 
+- [Гайд интеграции для Backend, Frontend и Audio Engine](docs/integration/team-integration.md)
 - [Корпус судей](docs/judge-corpus.md)
 - [Словарь проекта](CONTEXT.md) и [архитектурные решения](docs/adr/)
 - [База знаний команды](https://github.com/xyz-nebula/knowledge-base)
