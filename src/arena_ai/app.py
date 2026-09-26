@@ -43,6 +43,7 @@ from arena_ai.judge_retrieval import DemoJudgeRetrieval, JudgeRetrieval, Unavail
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
 from arena_ai.opponent_position import (
+    ConditionalPositionCommitmentError,
     IncompleteTransitionEvidenceError,
     UnearnedConcessionError,
     apply_position_transition,
@@ -377,7 +378,7 @@ def valid_proposal(
     resolution = proposal.resolution
     visible_text = visible_proposal_text(proposal)
     if contains_private_phrase(visible_text, case) or re.search(
-        r"\brevision_(?:reason|hint)\b|\bcomplete_transition_quote\b|"
+        r"\brevision_(?:reason|hint)\b|\b(?:complete_transition_quote|remove_conditional_commitment)\b|"
         r"\b(?:opponent_|invalid_opponent_|validator_)\w+\b",
         visible_text,
         re.IGNORECASE,
@@ -688,7 +689,9 @@ def create_app(
             user_text=request.user_text,
         )
         last_proposal_error: ModelErrorCode = "invalid_opponent_output"
-        last_proposal_hint: Literal["complete_transition_quote"] | None = None
+        last_proposal_hint: (
+            Literal["complete_transition_quote", "remove_conditional_commitment"] | None
+        ) = None
 
         def validated_proposal(
             raw: object,
@@ -728,6 +731,10 @@ def create_app(
                     transcript=request.snapshot.transcript,
                     stored_agreement=request.snapshot.state.agreement,
                 )
+            except ConditionalPositionCommitmentError:
+                last_proposal_error = "opponent_unearned_concession"
+                last_proposal_hint = "remove_conditional_commitment"
+                return None
             except IncompleteTransitionEvidenceError:
                 last_proposal_error = "opponent_unearned_concession"
                 last_proposal_hint = "complete_transition_quote"

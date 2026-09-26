@@ -47,6 +47,8 @@ class SequenceValidator:
     [
         "revision_reason: opponent_unearned_concession",
         "revision_hint: complete_transition_quote",
+        "revision_hint: remove_conditional_commitment",
+        "remove_conditional_commitment",
         "opponent_role_break",
     ],
 )

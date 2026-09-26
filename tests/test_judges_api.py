@@ -263,6 +263,8 @@ async def test_one_failed_judge_does_not_replace_other_verdicts() -> None:
     "override",
     [
         {"evidence_quote": "Несуществующая цитата"},
+        {"evidence_quote": "Готов компенсировать и обсудить KPI."},
+        {"evidence_quote": "Готов компенсировать пропуск; и обсудить KPI."},
         {"evidence_quote": " "},
         {"observation": "   "},
         {"effect": "director-only-marker"},

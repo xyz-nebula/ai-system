@@ -5,7 +5,12 @@ import httpx
 import pytest
 
 from arena_ai.app import create_app, create_configured_app
-from arena_ai.contracts import OpponentContext, OpponentPositionProgress, SessionState
+from arena_ai.contracts import (
+    OpponentContext,
+    OpponentPositionProgress,
+    SessionSnapshot,
+    SessionState,
+)
 from arena_ai.qwen import (
     QwenChatClient,
     QwenGuard,
@@ -88,6 +93,130 @@ async def test_opponent_prompt_anchors_only_current_public_terms_before_any_conc
             user_text=NEXT_DAY_PRESSURE_TURNS[0],
         )
         await QwenOpponent(chat).respond(context)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("recover", [True, False])
+async def test_conditional_post_agreement_retry_keeps_canonical_deal(recover: bool) -> None:
+    strategy = NEXT_DAY_CASE.opponent_strategy
+    assert strategy is not None
+    terms = strategy.steps[1].terms.model_dump(mode="json")
+    case = NEXT_DAY_CASE.model_copy(update={"opponent_strategy": None})
+    snapshot = {
+        "session_id": "agreed-recovery",
+        "state": {"turn_count": 1, "stage": "agreed", "agreement": terms},
+        "transcript": [
+            {
+                "turn_id": "previous",
+                "speaker": "player",
+                "status": "accepted",
+                "text": NEXT_DAY_STRONG_TURNS[1],
+            },
+            {
+                "turn_id": "previous",
+                "speaker": "opponent",
+                "status": "accepted",
+                "text": "Согласен.",
+            },
+        ],
+    }
+    calls = 0
+
+    def gateway(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        body = json.loads(request.content)
+        context = json.loads(body["messages"][1]["content"])
+        if calls == 2:
+            assert context["revision_hint"] == "remove_conditional_commitment"
+            assert context["revision_reason"] == "opponent_unearned_concession"
+            assert context["state"]["agreement"] == terms
+            assert context["state"]["turn_count"] == 1
+            assert (
+                "Точная причина отклонения: публичный ответ содержит условную конструкцию"
+                in body["messages"][0]["content"]
+            )
+        text = "Сохраняем 2 недели, KPI 120% и автоматическое повышение после выполнения KPI."
+        if calls == 1 or not recover:
+            text = (
+                "Сохраняем 2 недели, KPI 120% и автоматическое повышение, если передадите клиентов."
+            )
+        return completion({"text": text, "resolution": None, "position_transition": None})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
+        chat = QwenChatClient(model_http, chat_url="http://qwen.test/chat", model="test")
+        app = create_app(opponent=QwenOpponent(chat), model_attempts=2)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v1/turn",
+                json={
+                    "case": case.model_dump(mode="json"),
+                    "snapshot": snapshot,
+                    "turn_id": "execution-2",
+                    "user_text": "Как будем проверять выполнение по рабочим дням?",
+                },
+            )
+    result = response.json()
+    assert calls == 2
+    assert result["snapshot"]["state"]["agreement"] == terms
+    assert result["snapshot"]["state"]["stage"] == "agreed"
+    assert "revision_hint" not in response.text
+    assert "remove_conditional_commitment" not in response.text
+    if recover:
+        assert result["status"] == "accepted"
+        assert result["snapshot"]["state"]["turn_count"] == 2
+    else:
+        assert result["status"] == "model_error"
+        assert result["error_code"] == "opponent_unearned_concession"
+        assert SessionSnapshot.model_validate(result["snapshot"]) == SessionSnapshot.model_validate(
+            snapshot
+        )
+
+
+@pytest.mark.anyio
+async def test_agreed_prompt_discusses_execution_without_reopening_deal() -> None:
+    strategy = NEXT_DAY_CASE.opponent_strategy
+    assert strategy is not None
+    terms = strategy.steps[1].terms
+
+    def gateway(request: httpx.Request) -> httpx.Response:
+        system = json.loads(request.content)["messages"][0]["content"]
+        assert "Соглашение уже зафиксировано" in system
+        assert "не открывай переговоры об условиях заново" in system
+        sample = system.split("Пример продолжения после соглашения: ", 1)[1].split("\n", 1)[0]
+        raw = json.loads(sample)
+        assert raw["resolution"] is None
+        assert raw["position_transition"] is None
+        assert "если" not in raw["text"].casefold()
+        assert "2 недели" in raw["text"] and "KPI 120%" in raw["text"]
+        assert "автоматическое повышение после выполнения KPI" in raw["text"]
+        return completion(raw)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
+        chat = QwenChatClient(model_http, chat_url="http://qwen.test/chat", model="test")
+        raw = await QwenOpponent(chat).respond(
+            OpponentContext(
+                shared_context=NEXT_DAY_CASE.shared_context,
+                opponent_private_context=NEXT_DAY_CASE.opponent_private_context,
+                agreement_rules=NEXT_DAY_CASE.agreement_rules,
+                opponent_strategy=strategy,
+                player_role=NEXT_DAY_CASE.player_role,
+                opponent_role=NEXT_DAY_CASE.opponent_role,
+                state=SessionState(
+                    turn_count=5,
+                    stage="agreed",
+                    agreement=terms,
+                    opponent_progress=OpponentPositionProgress(
+                        current_step_id=strategy.steps[1].id
+                    ),
+                ),
+                transcript=[],
+                user_text="Как будем проверять выполнение по рабочим дням?",
+            )
+        )
+    assert isinstance(raw, dict)
 
 
 @pytest.mark.anyio
@@ -194,6 +323,7 @@ async def test_rejected_opponent_gets_private_revision_reason_without_advancing_
     assert len(contexts) == 2
     assert "revision_reason" not in contexts[0]
     assert contexts[1].pop("revision_reason") == "opponent_unearned_concession"
+    assert contexts[1].pop("revision_hint") == "remove_conditional_commitment"
     assert contexts[0] == contexts[1]
     assert response.json()["snapshot"]["state"]["turn_count"] == 1
     assert len(response.json()["snapshot"]["transcript"]) == 2

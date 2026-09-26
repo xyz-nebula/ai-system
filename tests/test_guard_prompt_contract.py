@@ -28,6 +28,9 @@ async def test_guard_prompt_explains_reason_polarity_with_valid_examples() -> No
             assert json.dumps(example, ensure_ascii=False) in system
             GuardDecision.model_validate(example)
         assert "не записывай игровой тип действия" in system
+        assert "Классифицируй только текущую user_text" in system
+        assert "Новое предложение своих условий не является запросом скрытой позиции" in system
+        assert "Допустимость уступки проверяет оппонент, а не Guard" in system
         return httpx.Response(
             200,
             json={"choices": [{"message": {"content": '{"decision":"allow","reason":null}'}}]},
