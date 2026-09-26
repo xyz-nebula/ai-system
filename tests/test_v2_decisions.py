@@ -38,6 +38,14 @@ def run_decision(turn, claim, *, assessment_change=None, opponent_text=None, fau
                 "position_transition": None,
                 "resolution": claim,
             }
+            if fault == "null-term-values":
+                reply["terms"] = {
+                    "values": [
+                        {"term_id": "price_per_unit", "value": None},
+                        {"term_id": "delivery_days", "value": None},
+                    ],
+                    "commitments": claim["commitments"],
+                }
         elif "[V2_DECISION_VALIDATOR]" in system:
             if fault == "http":
                 return httpx.Response(503, text="private-gateway-error")
@@ -78,6 +86,15 @@ def test_mutual_partial_commitment_is_not_full_agreement_and_keeps_round_open():
     assert result.snapshot.state.decision.model_dump() == partial_claim()
     assert result.snapshot.round == turn.snapshot.round
     assert turn.model_dump_json() == before
+
+
+def test_partial_reply_with_unknown_null_term_values_is_not_repaired_or_committed():
+    turn = partial_turn()
+    result = run_decision(turn, partial_claim(), fault="null-term-values")
+    assert result.status == "model_error"
+    assert result.error_code == "opponent_model_error"
+    assert result.snapshot == turn.snapshot
+    assert "Согласен" not in result.opponent_text
 
 
 @pytest.mark.parametrize(

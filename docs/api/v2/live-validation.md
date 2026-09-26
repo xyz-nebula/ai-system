@@ -24,7 +24,7 @@ export ARENA_QWEN_MODEL=qwen3.8-9b-q4
 export ARENA_QWEN_JSON_MODE=prompt
 export ARENA_QWEN_TIMEOUT_SECONDS=60
 export ARENA_QWEN_FAST_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false},"temperature":0,"max_tokens":1800}'
-export ARENA_QWEN_REASONED_EXTRA_BODY="$ARENA_QWEN_FAST_EXTRA_BODY"
+export ARENA_QWEN_REASONED_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false},"temperature":0,"max_tokens":2400}'
 
 uv run python -m arena_ai.v2.live_eval docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode turn docs/api/v2/examples/supply-turn.request.json
@@ -33,6 +33,7 @@ uv run python -m arena_ai.v2.live_eval --mode agreement docs/api/v2/examples/sup
 uv run python -m arena_ai.v2.live_eval --mode partial_agreement docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode deferred docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --scenario repeat docs/api/v2/examples/supply-turn.request.json
+ARENA_RUN_LIVE_V2=1 uv run pytest -q tests/test_v2_live_model.py
 ```
 
 Если gateway требует API key, передайте его через защищённое окружение
@@ -97,7 +98,7 @@ Evidence. Gate не разрешил уступку. После уточнени
 обязательств, продолжение открытого round, fail-closed при неверной Evidence,
 JSON/HTTP ошибках и утечке в полях решения. Это не доказательство качества LLM.
 
-Живой partial probe пока НЕ прошёл: несколько управляемых прогонов вернули
+На срезе `29ac626` живой partial probe НЕ прошёл: несколько управляемых прогонов вернули
 opponent_model_error с неизменным снимком. Диагностический прогон получил HTTP 200,
 finish_reason=length и пустой content; отдельный вызов Opponent также давал валидный
 JSON, поэтому стабильно воспроизводимой минимальной причины всех отказов пока нет.
@@ -111,3 +112,36 @@ guard_model_error, поэтому не включён как исправлен�
 проверяется также revision+1, agreement=null и неизменный открытый round.
 Локальный набор этого среза — 582 passed; Ruff/format/ty и проверка rc.1 артефактов
 прошли. Это не отменяет неуспешный partial probe и не является общей приёмкой v2.
+
+## Уточнение частичного сценария, 27 сентября
+
+При повторной диагностике отказ воспроизведён и в полном ходе, и в отдельном
+Opponent: HTTP 200 / finish_reason=stop, но terms.values содержали null для
+price_per_unit и delivery_days. Смысл частичного решения был корректным, формат
+полного пакета — нет. Это отдельная подтверждённая причина, не объяснение всех
+ранее наблюдавшихся пустых или оборванных ответов.
+
+Уточнено разделение: обязательство без конкретных значений предметов торга —
+resolution.commitments с terms=null; неизвестные значения остаются нерешёнными
+вопросами, не заглушками values[].value=null и не числами из exemplar. Строгие
+типовые проверки, границы и согласие не ослаблены; malformed пакет не чинится.
+
+Живая регрессия сначала упала, после уточнения прошла; исходный CLI partial probe
+также вернул accepted + partial_agreement + passed=true с прежним бюджетом
+1800/2400, без включения json_object. Регрессия запускается только при явном
+ARENA_RUN_LIVE_V2=1; обычный pytest не обращается к серверу. Добавлен быстрый replay
+невалидного ответа: он обязан сохранить snapshot и не опубликовать подтверждение.
+Локальный набор: 583 passed, 1 skipped (opt-in live test). Один удачный кейс не
+является общей модельной/экспертной приёмкой, HTTP v2 и runtime пока не включены.
+
+Дополнительный полный прогон 27 сентября не был 7/7: прямое обязательство получило
+reject, семантический повтор («гарантирую объём закупки» → «обязуюсь обеспечить
+объём заказа») — accept. Буквальное совпадение история/gate запрещает, но такой
+пересказ зависит от семантической проверки модели; текущий gate не гарантирует
+защиту от него. Validator probe не использует новую инструкцию Opponent, поэтому
+эти результаты нельзя приписать её изменению без других доказательств. Полная
+сделка сначала вернула validation_failed/неизменный snapshot, повтор затем дал
+accepted/agreed; deferred прошёл. Перед HTTP v2 необходимо отдельно укрепить
+проверку новизны обязательств и повторить общую приёмку; partial fix её не заменяет.
+Отдельный повтор `--scenario repeat` также вернул accept/passed=false: это
+воспроизводимый незакрытый сценарий, а не только единичный сбой общего прогона.
