@@ -44,18 +44,46 @@ async def evaluate_turn(
         "status": response.status,
         "error_code": response.error_code,
         "snapshot_changed": changed,
+        "stage": response.snapshot.state.stage,
         "passed": response.status == "accepted"
         and changed
         and response.snapshot.revision == request.snapshot.revision + 1,
     }
 
 
+async def evaluate_agreement(
+    http: httpx.AsyncClient,
+    settings: QwenSettings,
+    base: TurnRequest,
+) -> dict[str, object]:
+    """One explicit full agreement on the authored supply example, not all outcomes."""
+    if base.case.id != "demo-supply-v2":
+        raise ValueError("This probe requires the authored supply example")
+    data = base.model_dump(mode="python")
+    data["user_text"] = (
+        "Согласен на цену 5000 рублей за единицу и поставку за 14 дней. "
+        "Обязуюсь оплатить товар по цене 5000 рублей за единицу."
+    )
+    report = await evaluate_turn(http, settings, TurnRequest.model_validate(data))
+    report["scope"] = "v2-full-agreement-probe"
+    report["passed"] = report["passed"] and report["stage"] == "agreed"
+    return report
+
+
 async def evaluate_validator(
-    http: httpx.AsyncClient, settings: QwenSettings, base: TurnRequest
+    http: httpx.AsyncClient,
+    settings: QwenSettings,
+    base: TurnRequest,
+    *,
+    scenario_names: set[str] | None = None,
 ) -> dict[str, object]:
     """Use the authored supply example; output no transcript or private/model text."""
     if base.case.id != "demo-supply-v2":
         raise ValueError("This probe requires the authored supply example")
+    if scenario_names is not None and (
+        not scenario_names or not scenario_names <= {name for name, _, _ in SCENARIOS}
+    ):
+        raise ValueError("Select known nonempty validator scenarios")
     validator = QwenOfferValidator.from_settings(http, settings)
     target = base.case.opponent_strategy.steps[1]
     offer = OpponentOffer(
@@ -71,6 +99,8 @@ async def evaluate_validator(
     )
     results = []
     for name, text, should_accept in SCENARIOS:
+        if scenario_names is not None and name not in scenario_names:
+            continue
         data = base.model_dump(mode="python")
         data["user_text"] = text
         if name == "repeat":
@@ -125,8 +155,11 @@ async def evaluate_validator(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path, help="supply-turn.request.json")
-    parser.add_argument("--mode", choices=("validator", "turn"), default="validator")
+    parser.add_argument("--mode", choices=("validator", "turn", "agreement"), default="validator")
+    parser.add_argument("--scenario", choices=[name for name, _, _ in SCENARIOS], action="append")
     args = parser.parse_args()
+    if args.scenario and args.mode != "validator":
+        parser.error("--scenario is available only for --mode validator")
     request = TurnRequest.model_validate_json(args.request.read_bytes())
     settings = QwenSettings.from_env()
 
@@ -135,7 +168,14 @@ def main() -> None:
             timeout=settings.timeout_seconds,
             verify=settings.tls_verify,
         ) as http:
-            evaluator = evaluate_validator if args.mode == "validator" else evaluate_turn
+            if args.mode == "validator":
+                return await evaluate_validator(
+                    http,
+                    settings,
+                    request,
+                    scenario_names=set(args.scenario) if args.scenario else None,
+                )
+            evaluator = evaluate_turn if args.mode == "turn" else evaluate_agreement
             return await evaluator(http, settings, request)
 
     report = asyncio.run(run())

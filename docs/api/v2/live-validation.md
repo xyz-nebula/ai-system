@@ -29,6 +29,8 @@ export ARENA_QWEN_REASONED_EXTRA_BODY="$ARENA_QWEN_FAST_EXTRA_BODY"
 uv run python -m arena_ai.v2.live_eval docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode turn docs/api/v2/examples/supply-turn.request.json
 uv run python -m arena_ai.v2.live_eval --mode turn docs/api/v2/examples/next-day-turn.request.json
+uv run python -m arena_ai.v2.live_eval --mode agreement docs/api/v2/examples/supply-turn.request.json
+uv run python -m arena_ai.v2.live_eval --scenario repeat docs/api/v2/examples/supply-turn.request.json
 ```
 
 Если gateway требует API key, передайте его через защищённое окружение
@@ -51,7 +53,12 @@ Validator включает консервативный veto для явных R
 
 Turn probe проверяет один ожидаемо accepted negotiating-ход через три модельные
 роли и проверенный кандидат снимка с revision+1. При model_error снимок не меняется.
-Это не полная сессия: новые agreement/partial/deferred, finish, три судьи и Trainer
+Agreement probe проверяет полный кандидат сделки с доказательствами текущей пары,
+всех обязательств и mandatory rules. Один accepted без stage=agreed не считается
+успехом этой проверки. Сделка не закрывает round. В живом прогоне найдена путаница
+индексов обязательств; модель получает явный catalogue с индексом, role_id и speaker,
+но неверные доказательства не исправляются автоматически.
+Это не полная сессия: partial/deferred, finish, три судьи и Trainer
 v2 ещё не включены. Backend commit/CAS/deadline и интеграция с другими сервисами
 также не проверяются этой командой.
 
@@ -69,3 +76,14 @@ v2 ещё не включены. Backend commit/CAS/deadline и интеграц
 `demo-supply-v2` и `demo-next-day-v2` — accepted, локальный набор — 514 passed.
 Три синтаксически явных отрицательных сценария отклоняются до вызова LLM;
 7/7 — результат Validator с защитным шлюзом, не оценка одной модели без защиты.
+
+Следующий срез полной сделки: отдельный Agreement Validator прошёл проверку,
+полный живой ход вернул accepted + stage=agreed. Также обнаружено смешение правила
+полной сделки с доказательством уступки: эти правила исключены из контекста Offer
+Validator и проверяются отдельно. Неверные proof IDs/роли по-прежнему отклоняются.
+Локальный набор этого среза — 548 passed. Регрессия повтора сначала дала model_error:
+модель одновременно прислала accept и is_new_direct_commitment=false со старой
+Evidence. Gate не разрешил уступку. После уточнения инструкции отдельный повтор
+сценария вернул reject. Это подтверждает исправление конкретного сбоя, не гарантирует
+стабильность всех ответов модели; полную live/expert приёмку ещё предстоит выполнить.
+После этого уточнения полный повтор Validator probe также прошёл 7/7.

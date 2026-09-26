@@ -27,6 +27,8 @@ def test_validator_assesses_offer_through_model_http_without_mutating_turn() -> 
         assert context["offer"]["text"] == "Уточните объём заказа."
         assert context["current_user"]["quote"] == turn.user_text
         assert "preparation" not in context
+        assert "commitment_rules" not in context["opponent"]["agreement_policy"]
+        assert "required_commitment_ids" not in context["opponent"]["agreement_policy"]
         assert request.headers["authorization"] == "Bearer test-secret"
         return httpx.Response(
             200,

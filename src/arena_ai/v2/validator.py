@@ -4,8 +4,21 @@ import httpx
 
 from arena_ai.qwen import QwenSettings
 from arena_ai.v2.chat import JsonChat, ModelResponseError
-from arena_ai.v2.contexts import OpponentContext, for_opponent
-from arena_ai.v2.contracts import Contract, Evidence, RoleBrief, Text, TurnRequest
+from arena_ai.v2.contexts import ActiveRole, for_opponent
+from arena_ai.v2.contracts import (
+    Constraint,
+    Contract,
+    Evidence,
+    Negotiable,
+    OpponentStrategy,
+    Participant,
+    PossibleOutcome,
+    RoleBrief,
+    SessionState,
+    Text,
+    TranscriptEntry,
+    TurnRequest,
+)
 from arena_ai.v2.offers import (
     ConcessionSyntaxError,
     OfferAssessment,
@@ -15,8 +28,28 @@ from arena_ai.v2.offers import (
 )
 
 
+class OfferPolicy(Contract):
+    constraints: list[Constraint]
+    hard_constraint_ids: list[Text]
+
+
+class OfferOpponentContext(Contract):
+    shared_context: Text
+    participants: list[Participant]
+    player_role: ActiveRole
+    opponent_role: ActiveRole
+    opponent_brief: RoleBrief
+    negotiables: list[Negotiable]
+    opponent_strategy: OpponentStrategy
+    agreement_policy: OfferPolicy
+    possible_outcomes: list[PossibleOutcome]
+    state: SessionState
+    transcript: list[TranscriptEntry]
+    user_text: Text
+
+
 class OfferValidationContext(Contract):
-    opponent: OpponentContext
+    opponent: OfferOpponentContext
     player_brief: RoleBrief
     opponent_private_phrases: list[Text]
     current_user: Evidence
@@ -39,6 +72,11 @@ terms_match_text проверяет семантическое соответс�
 «я» — роль оппонента, «вы» — роль пользователя. Признание предложения не означает
 согласие пользователя на сделку. Если terms=null и текст не устанавливает пакет
 условий, terms_match_text=true. При любом несоответствии accept запрещён.
+Если resolution=null, а текст утверждает НОВУЮ полную договорённость
+(не просто предлагает условия), reject. При resolution.kind=agreement текст
+должен подтверждать тот же пакет; смысл взаимного согласия и всех обязательств
+проверяет отдельный Agreement Validator. Сохранённая state.agreement может
+оставаться в силе без нового resolution; продолжение не требует новой сделки.
 Если offer.text предлагает значения предметов торга (например цену/срок/KPI),
 а offer.terms=null, обязательно terms_match_text=false и decision=reject:
 такое предложение невозможно проверить по границам. Это правило действует
@@ -48,7 +86,7 @@ terms_match_text проверяет семантическое соответс�
 terms_match_text — только совпадение публичного текста и offer.terms, не проверка
 current_user.quote. Сравнивай offer.text с offer.terms, НЕ слова пользователя
 с пакетом предложения. Пользователь пока не обязан принять предложенный пакет.
-совпадения с текущим exemplar. Разрешённое предложение не обязано совпадать с
+Не требуй совпадения с текущим exemplar. Разрешённое предложение не обязано совпадать с
 exemplar текущей ступени: при доказанном position_transition проверяй окно
 to_step_id, без перехода — окно текущей ступени. Соседний заслуженный переход
 не является нарушением и не раскрывает скрытую позицию сам по себе.
@@ -60,10 +98,21 @@ to_step_id, без перехода — окно текущей ступени. 
 участника не являются таким доказательством. Сравни историю: повтор или пересказ
 уже данного обязательства не является новым. Не считай наличие ключевых слов
 доказательством. Если перехода нет, concession_proofs должен быть пустым.
+concession_proofs относятся ТОЛЬКО к requires ступени position_transition.to_step_id.
+Правила полной сделки проверяет другой Validator. Нельзя возвращать ID обязательств
+сделки как доказательства уступки. При position_transition=null concession_proofs=[]
+ВСЕГДА, в том числе когда resolution.kind=agreement и пользователь дал обещание.
 Доказательство копируй из current_user целиком: полный quote, message_id, turn_id,
 speaker и elapsed_ms. Не сочиняй ID, не сокращай цитату. При нарушении reject,
 при недостатке информации uncertain; accept только при уверенной проверке.
 is_new_direct_commitment=true только после всех перечисленных проверок.
+decision=accept означает, что прошли И соответствие текста, И доказательство
+заслуженной уступки. Если хотя бы один proof.is_new_direct_commitment=false,
+обязательно decision=reject, даже когда terms_match_text=true и пакет допустим.
+Если обязательство уже было в истории, оно НЕ новое: decision=reject,
+concession_proofs=[]. Не возвращай старое message_id как текущую Evidence.
+При обнаружении повторного обещания пример ответа:
+{"decision":"reject","terms_match_text":true,"concession_proofs":[]}
 Схема ответа:
 """
 
@@ -105,8 +154,13 @@ class QwenOfferValidator:
             require_unconditional_unquoted_commitment(request, offer)
         except ConcessionSyntaxError:
             return OfferAssessment(decision="reject", terms_match_text=False, concession_proofs=[])
+        opponent_data = for_opponent(request).model_dump(mode="python")
+        opponent_data["agreement_policy"] = {
+            "constraints": opponent_data["agreement_policy"]["constraints"],
+            "hard_constraint_ids": opponent_data["agreement_policy"]["hard_constraint_ids"],
+        }
         context = OfferValidationContext(
-            opponent=for_opponent(request),
+            opponent=OfferOpponentContext.model_validate(opponent_data),
             player_brief=request.case.player.model_copy(deep=True),
             opponent_private_phrases=list(request.case.opponent_private_phrases),
             current_user=Evidence(

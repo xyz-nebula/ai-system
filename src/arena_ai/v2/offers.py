@@ -27,10 +27,15 @@ class ConcessionProof(Contract):
     evidence: Evidence
 
 
+class AgreementClaim(Contract):
+    kind: Literal["agreement"]
+
+
 class OpponentOffer(Contract):
     text: Text
     terms: DealTerms | None
     position_transition: PositionTransition | None
+    resolution: AgreementClaim | None = None
 
 
 class OfferAssessment(Contract):

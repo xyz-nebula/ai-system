@@ -12,8 +12,13 @@ HTTP v2 и полный модельный контур **ещё не реали
 В `arena_ai.v2.turn.QwenTurnPipeline` реализован кандидат negotiating-хода:
 Guard → Opponent → Validator, пара сообщений и revision+1 только после проверки,
 неизменный snapshot при model_error. Candidate opponent time равен времени user
-до перезаписи Backend при commit. Новые agreement/partial/deferred ещё не фиксируются;
-этот срез не является полной реализацией `/v2/turn` и не включён в HTTP runtime.
+до перезаписи Backend при commit. Новая полная сделка фиксируется через отдельный
+Agreement Validator: подтверждение текущей пары, доказательства каждого обязательства
+и всех required_commitment_ids, проверенные по роли/сообщению/цитате/времени.
+Agreement не закрывает round; сохранённая сделка не меняется на следующем ходе.
+Partial/deferred ещё не фиксируются; этот срез не является полной реализацией
+`/v2/turn` и не включён в HTTP runtime. Claim/assessment — внутренние DTO модели,
+публичный контракт 2.0.0-rc.1 не расширяется.
 В `arena_ai.v2.offers` добавлена read-only проверка полного предложения и соседней
 уступки по входному результату Validator: literal текущая Evidence, новое прямое
 обязательство, окна/границы и сохранение сделки. Она не фиксирует agreement,

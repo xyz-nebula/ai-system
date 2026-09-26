@@ -1,4 +1,4 @@
-"""Candidate negotiating turns. Agreement/partial/deferred resolution is a later slice."""
+"""Checked candidate turns and full agreement; partial/deferred remain a later slice."""
 
 from typing import Literal, Self
 
@@ -6,10 +6,13 @@ import httpx
 from pydantic import model_validator
 
 from arena_ai.qwen import QwenSettings
+from arena_ai.v2.agreement_validator import AgreementValidationError, QwenAgreementValidator
+from arena_ai.v2.agreements import check_agreement
 from arena_ai.v2.chat import JsonChat, ModelResponseError
 from arena_ai.v2.contexts import for_guard, for_opponent
 from arena_ai.v2.contracts import (
     Contract,
+    DealTerms,
     Progress,
     SessionSnapshot,
     TranscriptEntry,
@@ -75,8 +78,16 @@ position_transition=null. ID из agreement_policy.required_commitment_ids НЕ 
 требованиями перехода; бери requirement_ids только из requires следующей ступени.
 Пример структуры вопроса без пакета условий и без перехода:
 {"text":"Какое встречное предложение вы готовы обсудить?","terms":null,"position_transition":null}
-Предложение ещё не является взаимной договорённостью: не заявляй «договорились»,
-не подтверждай полную/частичную сделку или перенос переговоров в этом срезе.
+Предложение ещё не является взаимной договорённостью. resolution=null, пока нет
+явного безусловного согласия обеих сторон на полный одинаковый пакет и всех
+обязательств. Если пользователь явно принял пакет, ты также принимаешь его,
+выполнены mandatory commitment rules, верни resolution={"kind":"agreement"}
+и полный terms; публичный текст должен явно подтверждать этот же пакет.
+Не объявляй согласие по одному «ну да», если его предмет неоднозначен.
+При условном согласии, вопросе, отказе или отсутствии обязательства resolution=null;
+не говори «договорились». Сделка не завершает раунд: продолжай обсуждение.
+Если state уже agreed и новых условий нет, resolution=null, прежняя сделка
+сохраняется. Частичную сделку и перенос обсуждения пока не подтверждай как итог.
 Верни только JSON OpponentOffer, без служебных пояснений.
 """
 
@@ -92,6 +103,7 @@ class QwenTurnPipeline:
             extra_body=settings.fast_extra_body,
         )
         self.validator = QwenOfferValidator.from_settings(http, settings)
+        self.agreement_validator = QwenAgreementValidator(http, settings)
 
     async def turn(self, request: TurnRequest) -> TurnResponse:
         error = "guard_model_error"
@@ -109,10 +121,22 @@ class QwenTurnPipeline:
             error = "validation_failed"
             assessment = await self.validator.assess(request, offer)
             checked = check_offer(request, offer, assessment)
+            agreement = None
+            if offer.resolution is not None:
+                error = "agreement_validation_failed"
+                agreement_assessment = await self.agreement_validator.assess(
+                    request, offer, assessment
+                )
+                agreement = check_agreement(request, offer, assessment, agreement_assessment)
             return self._candidate(
-                request, checked.text, "accepted", None, checked.opponent_progress
+                request,
+                checked.text,
+                "accepted",
+                None,
+                checked.opponent_progress,
+                agreement,
             )
-        except (ModelResponseError, OfferValidationError, ValueError):
+        except (ModelResponseError, OfferValidationError, AgreementValidationError, ValueError):
             return self._error(request, error)
 
     def _error(self, request: TurnRequest, code: str) -> TurnResponse:
@@ -139,12 +163,17 @@ class QwenTurnPipeline:
         ]
         | None,
         progress: Progress | None,
+        agreement: DealTerms | None = None,
     ) -> TurnResponse:
         data = request.snapshot.model_dump(mode="python")
         data["revision"] += 1
         data["state"]["turn_count"] += 1
         if progress is not None:
             data["state"]["opponent_progress"] = progress.model_dump(mode="python")
+        if agreement is not None:
+            data["state"].update(
+                stage="agreed", agreement=agreement.model_dump(mode="python"), decision=None
+            )
         for message_id, speaker, entry_status, entry_text, entry_reason in (
             (request.user_message_id, "player", status, request.user_text, reason),
             (
