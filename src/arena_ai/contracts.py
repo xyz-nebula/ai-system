@@ -385,6 +385,9 @@ class OpponentContext(Contract):
     revision_reason: ModelErrorCode | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    revision_hint: Literal["complete_transition_quote"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class GuardContext(Contract):

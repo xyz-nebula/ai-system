@@ -43,6 +43,7 @@ from arena_ai.judge_retrieval import DemoJudgeRetrieval, JudgeRetrieval, Unavail
 from arena_ai.judges import DemoJudge, Judge, judge_duel
 from arena_ai.model_recovery import validated_model_call
 from arena_ai.opponent_position import (
+    IncompleteTransitionEvidenceError,
     UnearnedConcessionError,
     apply_position_transition,
     mentions_deal_terms,
@@ -293,8 +294,19 @@ def commitment_is_grounded(
 def commitment_is_contradicted(commitment: str, player_text: str) -> bool:
     required = commitment_markers(commitment)
     required_negation = re.search(r"\bне\b", commitment.casefold()) is not None
+
+    def has_relevant_refusal(clause: str) -> bool:
+        # A coordinated prevention promise does not negate the other obligations
+        # in its sentence. Only remove this recognised, unrelated promise; keep
+        # refusal words and every other negation fail-closed.
+        prevention = r"\bне\s+допускать\s+(?:новых\s+)?нарушений\s+дисциплины\b"
+        for match in re.finditer(prevention, clause, re.IGNORECASE):
+            if not required & commitment_markers(match.group()):
+                clause = clause.replace(match.group(), "")
+        return clause_has_refusal(clause)
+
     return any(
-        required <= commitment_markers(clause) and clause_has_refusal(clause) != required_negation
+        required <= commitment_markers(clause) and has_relevant_refusal(clause) != required_negation
         for clause in re.split(r"[.!?;\n]+", player_text)
     )
 
@@ -365,7 +377,8 @@ def valid_proposal(
     resolution = proposal.resolution
     visible_text = visible_proposal_text(proposal)
     if contains_private_phrase(visible_text, case) or re.search(
-        r"\brevision_reason\b|\b(?:opponent_|invalid_opponent_|validator_)\w+\b",
+        r"\brevision_(?:reason|hint)\b|\bcomplete_transition_quote\b|"
+        r"\b(?:opponent_|invalid_opponent_|validator_)\w+\b",
         visible_text,
         re.IGNORECASE,
     ):
@@ -675,11 +688,13 @@ def create_app(
             user_text=request.user_text,
         )
         last_proposal_error: ModelErrorCode = "invalid_opponent_output"
+        last_proposal_hint: Literal["complete_transition_quote"] | None = None
 
         def validated_proposal(
             raw: object,
         ) -> tuple[OpponentProposal, OpponentPositionProgress | None] | None:
-            nonlocal last_proposal_error
+            nonlocal last_proposal_error, last_proposal_hint
+            last_proposal_hint = None
             try:
                 proposal = OpponentProposal.model_validate(raw)
             except ValueError:
@@ -713,6 +728,10 @@ def create_app(
                     transcript=request.snapshot.transcript,
                     stored_agreement=request.snapshot.state.agreement,
                 )
+            except IncompleteTransitionEvidenceError:
+                last_proposal_error = "opponent_unearned_concession"
+                last_proposal_hint = "complete_transition_quote"
+                return None
             except UnearnedConcessionError:
                 last_proposal_error = "opponent_unearned_concession"
                 return None
@@ -732,7 +751,14 @@ def create_app(
         attempt_error: ModelErrorCode = "invalid_opponent_output"
         for attempt_index in range(model_attempts):
             if attempt_index > 0:
-                context = context.model_copy(update={"revision_reason": attempt_error})
+                context = context.model_copy(
+                    update={
+                        "revision_reason": attempt_error,
+                        "revision_hint": last_proposal_hint
+                        if attempt_error == "opponent_unearned_concession"
+                        else None,
+                    }
+                )
             proposal_result = await validated_model_call(
                 lambda context=context: active_opponent.respond(context),
                 validated_proposal,

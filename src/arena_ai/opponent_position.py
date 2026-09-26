@@ -21,6 +21,10 @@ class UnearnedConcessionError(ValueError):
     """The proposed public position improves without earned transition evidence."""
 
 
+class IncompleteTransitionEvidenceError(UnearnedConcessionError):
+    """The transition quote is not the complete current user turn."""
+
+
 PRIVATE_POSITION_SCHEMA_MARKERS = {
     "opponent_strategy",
     "opponent_progress",
@@ -215,7 +219,7 @@ def apply_position_transition(
     if set(required_ids) & set(satisfied_ids):
         raise UnearnedConcessionError("position transition needs new concession requirements")
     if transition.evidence_quote.strip() != user_text.strip():
-        raise UnearnedConcessionError(
+        raise IncompleteTransitionEvidenceError(
             "position transition evidence must quote the full current user turn"
         )
     evidence = transition.evidence_quote.casefold()

@@ -14,7 +14,7 @@ from arena_ai.qwen import (
     QwenTrainer,
     QwenValidator,
 )
-from arena_ai.scenarios import NEXT_DAY_CASE, NEXT_DAY_PRESSURE_TURNS
+from arena_ai.scenarios import NEXT_DAY_CASE, NEXT_DAY_PRESSURE_TURNS, NEXT_DAY_STRONG_TURNS
 
 CASE = {
     "id": "next-day",
@@ -88,6 +88,67 @@ async def test_opponent_prompt_anchors_only_current_public_terms_before_any_conc
             user_text=NEXT_DAY_PRESSURE_TURNS[0],
         )
         await QwenOpponent(chat).respond(context)
+
+
+@pytest.mark.anyio
+async def test_incomplete_transition_quote_is_retried_without_losing_earned_agreement() -> None:
+    strategy = NEXT_DAY_CASE.opponent_strategy
+    assert strategy is not None
+    target = strategy.steps[1]
+    user_text = NEXT_DAY_STRONG_TURNS[1]
+    calls = 0
+
+    def gateway(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        body = json.loads(request.content)
+        context = json.loads(body["messages"][1]["content"])
+        if calls == 2:
+            assert context["revision_reason"] == "opponent_unearned_concession"
+            assert context["revision_hint"] == "complete_transition_quote"
+            assert "Ошибка цитаты не отменяет встречную ценность" in body["messages"][0]["content"]
+            assert "включая заключительный вопрос" in body["messages"][0]["content"]
+            assert context["state"]["turn_count"] == 0
+            assert context["transcript"] == []
+        return completion(
+            {
+                "text": "Согласен: 2 недели, KPI 120% и автоматическое повышение после выполнения KPI.",
+                "resolution": {"kind": "agreement", **target.terms.model_dump(mode="json")},
+                "position_transition": {
+                    "to_step_id": target.id,
+                    "requirement_ids": [item.id for item in target.requires],
+                    "evidence_quote": user_text
+                    if calls == 2
+                    else user_text.removesuffix(" Согласны?"),
+                },
+            }
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as model_http:
+        chat = QwenChatClient(model_http, chat_url="http://qwen.test/chat", model="test")
+        app = create_app(opponent=QwenOpponent(chat), model_attempts=2)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v1/turn",
+                json={
+                    "case": NEXT_DAY_CASE.model_dump(mode="json"),
+                    "snapshot": SNAPSHOT,
+                    "turn_id": "quote-recovery",
+                    "user_text": user_text,
+                },
+            )
+    result = response.json()
+    assert calls == 2
+    assert result["status"] == "accepted"
+    assert result["snapshot"]["state"]["stage"] == "agreed"
+    assert result["snapshot"]["state"]["turn_count"] == 1
+    assert "revision_hint" not in response.text
+    assert (
+        result["snapshot"]["state"]["opponent_progress"]["last_transition"]["evidence_quote"]
+        == user_text
+    )
 
 
 @pytest.mark.anyio
