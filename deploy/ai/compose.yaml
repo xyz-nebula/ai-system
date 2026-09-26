@@ -1,0 +1,47 @@
+name: arena-ai
+
+services:
+  ai:
+    image: ${ARENA_IMAGE:?Set the built release image}
+    network_mode: host
+    env_file:
+      - ${ARENA_ENV_FILE:?Set the absolute protected server env file}
+    environment:
+      ARENA_BIND_IP: ${ARENA_BIND_IP:?Set the private server IP}
+    command:
+      - uvicorn
+      - arena_ai.app:app
+      - --host
+      - ${ARENA_BIND_IP:?Set the private server IP}
+      - --port
+      - "8000"
+      - --no-access-log
+      - --log-level
+      - warning
+    user: "10001:10001"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 2
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, urllib.request; urllib.request.urlopen('http://' + os.environ['ARENA_BIND_IP'] + ':8000/health/live', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

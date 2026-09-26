@@ -1,0 +1,41 @@
+{
+  "release": {
+    "bundle_sha256": "f4e50d251aae346be917f87a4093c12ea540413eba73e4586c1e94c012c70dbe",
+    "image": "arena-ai:f4e50d251aae",
+    "image_id": "sha256:956e6aeb044c0a20fa0548c35b5b3b19a2bd328199e1e3236962f63c6eb61a8f"
+  },
+  "checks": {
+    "process_live": true,
+    "model_ready": true,
+    "service_info": true,
+    "openapi_matches": true,
+    "turn_requires_token": true,
+    "finish_requires_token": true,
+    "turn_validates_request": true,
+    "finish_requires_accepted_turn": true,
+    "live_turn_accepted": true,
+    "live_snapshot_advanced": true,
+    "live_finish_received": true,
+    "three_judges_ready": true,
+    "trainer_ready": true
+  },
+  "live_duel": {
+    "turn_status": "accepted",
+    "turn_error": null,
+    "judge_slots": {
+      "hiring": "ready",
+      "negotiation": "ready",
+      "ownership": "ready"
+    },
+    "judge_errors": {},
+    "trainer": "ready",
+    "trainer_error": null
+  },
+  "status": "passed",
+  "limitations": [
+    "minimal_one_turn_finish_not_full_adversarial_acceptance",
+    "not_an_expert_judge_quality_review",
+    "not_a_backend_frontend_audio_end_to_end_test",
+    "private_vpn_connection_from_workstation_timed_out_ssh_tunnel_passed"
+  ]
+}

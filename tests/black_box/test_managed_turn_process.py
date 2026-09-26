@@ -119,10 +119,127 @@ def ai_service_url() -> Iterator[str]:
         yield service_url
 
 
+def test_server_smoke_checks_public_contract_without_generating_a_duel(
+    ai_service_url: str,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    result = subprocess.run(
+        [sys.executable, "scripts/check_ai_service.py", "--api-url", ai_service_url],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["status"] == "passed"
+    assert report["checks"] == {
+        "process_live": True,
+        "model_ready": True,
+        "service_info": True,
+        "openapi_matches": True,
+        "turn_requires_token": True,
+        "finish_requires_token": True,
+        "turn_validates_request": True,
+        "finish_requires_accepted_turn": True,
+    }
+    assert SERVICE_TOKEN not in result.stdout + result.stderr
+
+
+def test_server_smoke_can_finish_a_real_http_duel_without_printing_dialogue(
+    ai_service_url: str,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_ai_service.py",
+            "--api-url",
+            ai_service_url,
+            "--live-duel",
+            "--timeout",
+            "5",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["status"] == "passed"
+    assert report["live_duel"]["judge_slots"] == {
+        "hiring": "ready",
+        "negotiation": "ready",
+        "ownership": "ready",
+    }
+    assert report["live_duel"]["trainer"] == "ready"
+    assert "Понимаю ваши сомнения" not in result.stdout
+    assert "согласуем измеримые" not in result.stdout
+    assert SERVICE_TOKEN not in result.stdout + result.stderr
+
+
 @pytest.fixture
 def failing_finish_ai_service_url() -> Iterator[str]:
     with running_ai_service("qwen-black-box-failing-finish") as service_url:
         yield service_url
+
+
+def test_server_smoke_reports_partial_finish_as_failure(
+    failing_finish_ai_service_url: str,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_ai_service.py",
+            "--api-url",
+            failing_finish_ai_service_url,
+            "--live-duel",
+            "--timeout",
+            "5",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    report = json.loads(result.stdout)
+    assert report["status"] == "failed"
+    assert report["live_duel"]["judge_slots"] == {
+        "hiring": "ready",
+        "negotiation": "ready",
+        "ownership": "failed",
+    }
+    assert report["live_duel"]["judge_errors"] == {"ownership": "invalid_judge_output"}
+    assert report["checks"]["three_judges_ready"] is False
+    assert SERVICE_TOKEN not in result.stdout + result.stderr
+
+
+def test_server_smoke_requires_a_token_before_connecting() -> None:
+    environment = os.environ.copy()
+    environment.pop("ARENA_SERVICE_TOKEN", None)
+    result = subprocess.run(
+        [sys.executable, "scripts/check_ai_service.py", "--api-url", "http://127.0.0.1:1"],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {"status": "failed", "error": "service_token_required"}
 
 
 def test_managed_turn_contract_through_independent_http_processes(ai_service_url: str) -> None:
