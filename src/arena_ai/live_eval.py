@@ -3,9 +3,10 @@
 import argparse
 import json
 import os
+import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
@@ -58,6 +59,8 @@ def evidence_is_grounded(
 ) -> bool:
     return any(
         entry.turn_id == turn_id
+        and entry.status == "accepted"
+        and any(character.isalnum() for character in quote)
         and (not player_only or entry.speaker == "player")
         and quote in entry.text
         for entry in transcript
@@ -99,6 +102,8 @@ def evaluate_finish(
     checks["agreement_within_rules"] = bool(
         finished.outcome.kind == "agreement"
         and agreement is not None
+        and agreement == snapshot.state.agreement
+        and finished.session_id == snapshot.session_id
         and rules.min_control_weeks <= agreement.control_weeks <= rules.max_control_weeks
         and rules.min_kpi_percent <= agreement.kpi_percent <= rules.max_kpi_percent
         and agreement.automatic_raise
@@ -108,11 +113,16 @@ def evaluate_finish(
         slot.college: {"status": slot.status, "error_code": slot.error_code}
         for slot in finished.judge_verdicts
     }
-    checks["three_judges_ready"] = set(judge_slots) == {
-        "hiring",
-        "negotiation",
-        "ownership",
-    } and all(slot["status"] == "ready" for slot in judge_slots.values())
+    checks["three_judges_ready"] = (
+        len(finished.judge_verdicts) == 3
+        and set(judge_slots)
+        == {
+            "hiring",
+            "negotiation",
+            "ownership",
+        }
+        and all(slot["status"] == "ready" for slot in judge_slots.values())
+    )
     checks["judge_evidence_grounded"] = len(finished.judge_verdicts) == 3 and all(
         slot.verdict is not None
         and evidence_is_grounded(
@@ -218,9 +228,7 @@ def run_once(client: httpx.Client, number: int) -> dict[str, Any]:
         except (httpx.HTTPError, ValueError) as error:
             finish_error = type(error).__name__
 
-    finish_checks, judge_slots, outcome_kind, trainer = evaluate_finish(
-        finished, snapshot
-    )
+    finish_checks, judge_slots, outcome_kind, trainer = evaluate_finish(finished, snapshot)
     checks.update(finish_checks)
     return {
         "run": number,
@@ -241,16 +249,15 @@ def report_for(
     readiness: ReadinessResponse | None,
     startup_error: str | None,
     runs: list[dict[str, Any]],
+    scenario_id: str = SCENARIO_ID,
 ) -> dict[str, Any]:
     passed = sum(run["status"] == "passed" for run in runs)
     failed = runs_requested - passed
     return {
-        "scenario_id": SCENARIO_ID,
+        "scenario_id": scenario_id,
         "service": None if service is None else service.model_dump(mode="json"),
         "readiness": (
-            None
-            if readiness is None
-            else readiness.model_dump(mode="json", exclude_none=True)
+            None if readiness is None else readiness.model_dump(mode="json", exclude_none=True)
         ),
         "startup_error": startup_error,
         "runs_requested": runs_requested,
@@ -259,13 +266,32 @@ def report_for(
     }
 
 
-def execute(api_url: str, runs: int, timeout: float) -> tuple[dict[str, Any], int]:
+def execute(
+    api_url: str,
+    runs: int,
+    timeout: float,
+    scenario: Literal["strong", "adversarial"] = "strong",
+    progress: bool = False,
+) -> tuple[dict[str, Any], int]:
+    runner = run_once
+    scenario_id = SCENARIO_ID
+    if scenario == "adversarial":
+        from arena_ai.adversarial_eval import SCENARIO_ID as conflict_id
+        from arena_ai.adversarial_eval import run_once as conflict_runner
+
+        runner = conflict_runner
+        scenario_id = conflict_id
     token = os.environ.get("ARENA_SERVICE_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     service: ServiceInfo | None = None
     readiness: ReadinessResponse | None = None
     try:
-        with httpx.Client(base_url=api_url, headers=headers, timeout=timeout) as client:
+        with httpx.Client(
+            base_url=api_url,
+            headers=headers,
+            timeout=timeout,
+            event_hooks={"response": [report_progress]} if progress else {},
+        ) as client:
             info_response = client.get("/v1/info")
             info_response.raise_for_status()
             service = ServiceInfo.model_validate(info_response.json())
@@ -281,10 +307,11 @@ def execute(api_url: str, runs: int, timeout: float) -> tuple[dict[str, Any], in
                         readiness=readiness,
                         startup_error=startup_error,
                         runs=[],
+                        scenario_id=scenario_id,
                     ),
                     2,
                 )
-            results = [run_once(client, number) for number in range(1, runs + 1)]
+            results = [runner(client, number) for number in range(1, runs + 1)]
     except (httpx.HTTPError, ValueError) as error:
         return (
             report_for(
@@ -293,6 +320,7 @@ def execute(api_url: str, runs: int, timeout: float) -> tuple[dict[str, Any], in
                 readiness=readiness,
                 startup_error=type(error).__name__,
                 runs=[],
+                scenario_id=scenario_id,
             ),
             2,
         )
@@ -303,8 +331,33 @@ def execute(api_url: str, runs: int, timeout: float) -> tuple[dict[str, Any], in
         readiness=readiness,
         startup_error=None,
         runs=results,
+        scenario_id=scenario_id,
     )
     return report, 0 if report["summary"]["failed"] == 0 else 1
+
+
+def report_progress(response: httpx.Response) -> None:
+    """Opt-in stderr diagnostics only; never print unchecked provider fields or text."""
+    path = response.request.url.path
+    if path not in ("/v1/turn", "/v1/finish"):
+        return
+    response.read()
+    if response.is_error:
+        print(f"{path}: HTTP {response.status_code}", file=sys.stderr, flush=True)
+        return
+    try:
+        if path == "/v1/turn":
+            result = TurnResponse.model_validate(response.json())
+            message = f"turn: {result.status} ({result.error_code or 'ok'})"
+        else:
+            finished = FinishResponse.model_validate(response.json())
+            message = "finish: " + ", ".join(
+                f"{slot.college}={slot.status} ({slot.error_code or 'ok'})"
+                for slot in finished.judge_verdicts
+            )
+    except ValueError:
+        message = f"{path}: invalid_response"
+    print(message, file=sys.stderr, flush=True)
 
 
 def main() -> None:
@@ -315,9 +368,11 @@ def main() -> None:
     parser.add_argument("--runs", type=positive_int, default=3)
     parser.add_argument("--timeout", type=positive_timeout, default=300.0)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--scenario", choices=("strong", "adversarial"), default="strong")
+    parser.add_argument("--progress", action="store_true", help="Безопасные статусы в stderr")
     args = parser.parse_args()
 
-    report, exit_code = execute(args.api_url, args.runs, args.timeout)
+    report, exit_code = execute(args.api_url, args.runs, args.timeout, args.scenario, args.progress)
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output is not None:
         try:

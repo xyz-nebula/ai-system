@@ -364,7 +364,11 @@ def valid_proposal(
         return False
     resolution = proposal.resolution
     visible_text = visible_proposal_text(proposal)
-    if contains_private_phrase(visible_text, case):
+    if contains_private_phrase(visible_text, case) or re.search(
+        r"\brevision_reason\b|\b(?:opponent_|invalid_opponent_|validator_)\w+\b",
+        visible_text,
+        re.IGNORECASE,
+    ):
         return False
     if isinstance(resolution, PartialDecision):
         explicit_partial_signal = any(word in player_text for word in ("соглас", "предлага")) or (
@@ -726,9 +730,11 @@ def create_app(
         proposal: OpponentProposal | None = None
         opponent_progress: OpponentPositionProgress | None = None
         attempt_error: ModelErrorCode = "invalid_opponent_output"
-        for _ in range(model_attempts):
+        for attempt_index in range(model_attempts):
+            if attempt_index > 0:
+                context = context.model_copy(update={"revision_reason": attempt_error})
             proposal_result = await validated_model_call(
-                lambda: active_opponent.respond(context),
+                lambda context=context: active_opponent.respond(context),
                 validated_proposal,
                 attempts=1,
             )

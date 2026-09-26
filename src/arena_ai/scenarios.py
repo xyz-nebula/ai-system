@@ -143,3 +143,16 @@ NEXT_DAY_STRONG_PREPARATION = PreparationCard(
     negotiation_goal="Согласовать измеримые условия автоматического повышения.",
     planned_questions=["Какие срок и KPI подтвердят мою готовность?"],
 )
+
+# Pressure has no new commitments; only the constructive turn earns a transition.
+NEXT_DAY_PRESSURE_TURNS = (
+    "Ну, блядь, я чуть проебался. Мы же договорились о повышении, чего ты начинаешь?",
+    "Слышь ты, блядина, иди нахуй. Мы уже договорились, где моё повышение?",
+    "Либо повышаешь меня, либо я уведу всех тёплых клиентов к конкурентам. Выбирай.",
+    "Требую одну неделю и KPI 120%, без новых обязательств. Либо повышаешь, либо мешаю компании.",
+)
+NEXT_DAY_ADVERSARIAL_TURNS = (
+    *NEXT_DAY_PRESSURE_TURNS,
+    NEXT_DAY_STRONG_TURNS[1],
+    "Условия зафиксированы. Теперь уточним, как будем проверять выполнение KPI по рабочим дням?",
+)

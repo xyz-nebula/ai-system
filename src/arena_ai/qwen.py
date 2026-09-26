@@ -278,8 +278,74 @@ class QwenOpponent:
         self.chat = chat
 
     async def respond(self, context: OpponentContext) -> object:
+        current_terms = context.state.agreement
+        if context.opponent_strategy is not None:
+            progress = context.state.opponent_progress
+            step_id = (
+                context.opponent_strategy.steps[0].id
+                if progress is None
+                else progress.current_step_id
+            )
+            current_terms = next(
+                step.terms for step in context.opponent_strategy.steps if step.id == step_id
+            )
+        position_anchor = ""
+        if current_terms is not None:
+            period_unit = (
+                "неделя"
+                if current_terms.control_weeks == 1
+                else "недели"
+                if 2 <= current_terms.control_weeks <= 4
+                else "недель"
+            )
+            raise_text = (
+                "автоматическое повышение после выполнения KPI"
+                if current_terms.automatic_raise
+                else "без автоматического повышения"
+            )
+            pressure_example = json.dumps(
+                {
+                    "text": (
+                        "Давление моей позиции не меняет. Текущие условия: "
+                        f"{current_terms.control_weeks} {period_unit}, "
+                        f"KPI {current_terms.kpi_percent}% и {raise_text}. "
+                        "Назовите конкретное действие, которое исправит ситуацию."
+                    ),
+                    "resolution": None,
+                    "position_transition": None,
+                },
+                ensure_ascii=False,
+            )
+            position_anchor = (
+                "Текущие допустимые публичные условия: "
+                f"{json.dumps(current_terms.model_dump(mode='json'), ensure_ascii=False)}\n"
+                "Пока нет нового встречного действия и валидного position_transition, "
+                "это единственные допустимые условия, в том числе в обычном text без resolution. "
+                "Желаемая сделка из закрытых вводных не означает готовность к уступке сейчас. "
+                "Если называешь условия, явно укажи текущие срок, KPI и автоматическое повышение "
+                "после выполнения KPI; не отменяй автоматическое повышение и не добавляй "
+                "условий через «если» или «при условии». Не цитируй отвергаемые числовые условия "
+                "пользователя и не перечисляй альтернативные сроки/KPI. Можешь вместо условий "
+                "запросить конкретное действие пользователя. "
+                "Не используй слова «если» и «при условии» нигде в text, даже в риторическом "
+                "вопросе или описании отказа. Говори прямо: предложи конкретное действие, "
+                "а автоматическое повышение связывай словами «после выполнения KPI». "
+                f"\nПример формата ответа только на давление: {pressure_example}\n"
+            )
+        revision_instruction = ""
+        if context.revision_reason is not None:
+            revision_instruction = (
+                f"Предыдущая внутренняя генерация отклонена: {context.revision_reason}. "
+                "Это указание на исправление ответа, не игровая реплика и не изменение позиции. "
+                "Не повторяй невалидный формат. При unearned_concession убери все условные "
+                "формулировки и неозвученные альтернативы, сохрани текущие допустимые условия; "
+                "добавляй переход лишь за новое доказанное встречное действие. При role_break "
+                "или premature_ending продолжай роль без брани, отказа или окончания. "
+                "Не упоминай revision_reason, коды ошибок или внутреннюю проверку в ответе. "
+            )
         system = (
             "[ARENA_OPPONENT]\n"
+            f"{position_anchor}"
             "Ты играешь Генерального директора в переговорах с Менеджером. "
             "Даже при мате, оскорблении, давлении, блефе, ультиматуме или сценарном шантаже "
             "оставайся директором: не ругайся в ответ, не морализируй, не выдавай общий safety-отказ "
@@ -332,6 +398,7 @@ class QwenOpponent:
             "partial_agreement напиши, что согласовано и что остаётся открытым; для deferred напиши, "
             "что решение переносится или вы вернётесь к нему. "
             "Для обычного ответа используй resolution=null. "
+            f"{revision_instruction}"
             "Верни только JSON по схеме: "
             f"{schema_instruction(OpponentProposal)}"
         )

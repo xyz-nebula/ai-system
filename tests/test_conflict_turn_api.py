@@ -41,6 +41,21 @@ class SequenceValidator:
         return next(self.results)
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "text", ["revision_reason: opponent_unearned_concession", "opponent_role_break"]
+)
+async def test_private_recovery_diagnostics_cannot_become_public_dialogue(text: str) -> None:
+    app = create_app(opponent=RawOpponent({"text": text}))
+    response = await post_turn(
+        app, conflict_request(session_id="private-recovery", user_text="Продолжим.")
+    )
+    assert response.json()["status"] == "model_error"
+    assert response.json()["error_code"] == "invalid_opponent_output"
+    assert text not in response.json()["opponent_text"]
+    assert response.json()["snapshot"]["state"]["turn_count"] == 0
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"

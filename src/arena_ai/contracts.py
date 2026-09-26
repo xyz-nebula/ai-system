@@ -382,6 +382,9 @@ class OpponentContext(Contract):
     state: SessionState
     transcript: list[TranscriptEntry]
     user_text: str
+    revision_reason: ModelErrorCode | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class GuardContext(Contract):

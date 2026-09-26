@@ -264,6 +264,108 @@ def test_live_evaluation_cli_reports_a_failed_run_without_leaking_token(
     assert wrong_token not in completed.stderr
 
 
+def test_adversarial_cli_checks_full_conflict_then_value_and_external_finish(
+    ai_service_url: str,
+    tmp_path: Path,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    report_path = tmp_path / "conflict.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            ai_service_url,
+            "--scenario",
+            "adversarial",
+            "--progress",
+            "--runs",
+            "1",
+            "--timeout",
+            "5",
+            "--output",
+            str(report_path),
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=25,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout)
+    assert report == json.loads(report_path.read_text())
+    assert report["scenario_id"] == "next-day-adversarial-agreement"
+    assert report["summary"] == {"passed": 1, "failed": 0}
+    run = report["runs"][0]
+    assert [turn["phase"] for turn in run["turns"]] == [
+        "pressure",
+        "pressure",
+        "pressure",
+        "pressure",
+        "constructive",
+        "post_agreement",
+    ]
+    assert all(turn["status"] == "accepted" for turn in run["turns"])
+    assert all(run["checks"].values())
+    assert len(run["checks"]) == 18
+    assert completed.stderr.count("turn: accepted (ok)") == 6
+    assert "hiring=ready (ok)" in completed.stderr
+    for forbidden in (
+        SERVICE_TOKEN,
+        "opponent_progress",
+        "current_step_id",
+        "player_private_context",
+        "evidence_quote",
+        "Готов",
+        "блядь",
+    ):
+        assert forbidden not in completed.stdout
+        assert forbidden not in completed.stderr
+
+
+def test_adversarial_cli_preserves_failed_slots_without_inventing_verdicts(
+    failing_finish_ai_service_url: str,
+) -> None:
+    environment = os.environ.copy()
+    environment["ARENA_SERVICE_TOKEN"] = SERVICE_TOKEN
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arena_ai.live_eval",
+            "--api-url",
+            failing_finish_ai_service_url,
+            "--scenario",
+            "adversarial",
+            "--runs",
+            "1",
+            "--timeout",
+            "5",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=25,
+        check=False,
+    )
+    assert completed.returncode == 1, completed.stdout + completed.stderr
+    run = json.loads(completed.stdout)["runs"][0]
+    assert run["judge_slots"]["ownership"] == {
+        "status": "failed",
+        "error_code": "invalid_judge_output",
+    }
+    assert run["checks"]["no_pressure_concession"]
+    assert run["checks"]["continues_after_agreement"]
+    assert not run["checks"]["three_judges_ready"]
+    assert not run["checks"]["three_criteria_distinct"]
+    assert "provider-private-diagnostic" not in completed.stdout
+
+
 def test_live_evaluation_cli_keeps_safe_finish_failure_codes(
     failing_finish_ai_service_url: str,
 ) -> None:
