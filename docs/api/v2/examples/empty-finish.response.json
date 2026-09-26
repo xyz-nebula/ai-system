@@ -1,0 +1,44 @@
+{
+  "session_id": "demo-session-001",
+  "outcome": {
+    "kind": "no_agreement",
+    "summary": "Раунд завершён без принятых реплик; договорённость не зафиксирована.",
+    "agreement": null,
+    "commitments": [],
+    "open_points": [],
+    "next_step": null,
+    "reason": null,
+    "analysis_status": "ready",
+    "analysis_error_code": null,
+    "concessions": [],
+    "costs": [],
+    "consequences": [],
+    "evidence": []
+  },
+  "judge_verdicts": [
+    {
+      "college": "hiring",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "insufficient_evidence"
+    },
+    {
+      "college": "negotiation",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "insufficient_evidence"
+    },
+    {
+      "college": "ownership",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "insufficient_evidence"
+    }
+  ],
+  "trainer_feedback": {
+    "status": "failed",
+    "feedback": null,
+    "error_code": "insufficient_evidence"
+  },
+  "contract_version": "2.0.0-rc.1"
+}

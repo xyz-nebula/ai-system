@@ -1,0 +1,8 @@
+{
+  "case_id": "demo-next-day-v2",
+  "case_config_version": "demo-1",
+  "player_role_id": "manager",
+  "opponent_role_id": "director",
+  "mode": "voice",
+  "client_request_id": "demo-create-command"
+}

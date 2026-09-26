@@ -1,0 +1,259 @@
+{
+  "case": {
+    "id": "demo-next-day-v2",
+    "config_version": "demo-1",
+    "title": "Учебный пример: разговор о повышении",
+    "shared_context": "Менеджер и директор обсуждают повышение после отсутствия на работе. В ситуации участвует HR. Это вымышленный пример конфигурации для проектирования интерфейса, не утверждённые вводные кейса.",
+    "participants": [
+      {
+        "id": "manager",
+        "name": "Менеджер",
+        "public_context": "Менеджер по продажам",
+        "public_interests": [
+          "Сохранить рабочие отношения"
+        ]
+      },
+      {
+        "id": "director",
+        "name": "Генеральный директор",
+        "public_context": "Принимает решение о повышении",
+        "public_interests": [
+          "Предсказуемость работы"
+        ]
+      },
+      {
+        "id": "hr",
+        "name": "HR",
+        "public_context": "Участник ситуации, не активный собеседник",
+        "public_interests": [
+          "Сохранить сотрудника и трудовую дисциплину"
+        ]
+      }
+    ],
+    "player": {
+      "role_id": "manager",
+      "private_context": "Учебные закрытые вводные менеджера.",
+      "interests": [
+        {
+          "text": "Сохранить договорённость о повышении",
+          "visibility": "private"
+        }
+      ],
+      "batna": null
+    },
+    "opponent": {
+      "role_id": "director",
+      "private_context": "Учебные закрытые вводные директора.",
+      "interests": [
+        {
+          "text": "Получить проверяемую ответственность",
+          "visibility": "private"
+        }
+      ],
+      "batna": "Не менять текущие условия до появления встречного обязательства."
+    },
+    "negotiables": [
+      {
+        "id": "control_days",
+        "label": "Длительность контроля",
+        "value_type": "number",
+        "unit": "day",
+        "choices": []
+      },
+      {
+        "id": "kpi_percent",
+        "label": "KPI",
+        "value_type": "number",
+        "unit": "percent",
+        "choices": []
+      },
+      {
+        "id": "automatic_raise",
+        "label": "Повышение после выполнения условий",
+        "value_type": "boolean",
+        "unit": null,
+        "choices": []
+      }
+    ],
+    "opponent_strategy": {
+      "steps": [
+        {
+          "id": "declared",
+          "kind": "declared",
+          "terms": {
+            "values": [
+              {
+                "term_id": "control_days",
+                "value": 28
+              },
+              {
+                "term_id": "kpi_percent",
+                "value": 130
+              },
+              {
+                "term_id": "automatic_raise",
+                "value": true
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "manager",
+                "text": "Компенсировать последствия пропуска"
+              },
+              {
+                "role_id": "manager",
+                "text": "Выполнить KPI 130% за 28 дней"
+              },
+              {
+                "role_id": "manager",
+                "text": "Сообщать о форс-мажоре сразу"
+              },
+              {
+                "role_id": "director",
+                "text": "Повысить зарплату после выполнения согласованных условий"
+              }
+            ]
+          },
+          "requires": []
+        },
+        {
+          "id": "target",
+          "kind": "target",
+          "terms": {
+            "values": [
+              {
+                "term_id": "control_days",
+                "value": 14
+              },
+              {
+                "term_id": "kpi_percent",
+                "value": 120
+              },
+              {
+                "term_id": "automatic_raise",
+                "value": true
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "manager",
+                "text": "Компенсировать последствия пропуска"
+              },
+              {
+                "role_id": "manager",
+                "text": "Выполнить KPI 120% за 14 дней"
+              },
+              {
+                "role_id": "manager",
+                "text": "Сообщать о форс-мажоре сразу"
+              },
+              {
+                "role_id": "director",
+                "text": "Повысить зарплату после выполнения согласованных условий"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "measurable-trial",
+              "description": "Измеримый контрольный период и обязательство компенсировать пропуск",
+              "direct_commitment_markers": [
+                "предлагаю",
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "компенс",
+                  "последств"
+                ],
+                [
+                  "сразу",
+                  "сообщать"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "red-line",
+          "kind": "red_line",
+          "terms": {
+            "values": [
+              {
+                "term_id": "control_days",
+                "value": 7
+              },
+              {
+                "term_id": "kpi_percent",
+                "value": 120
+              },
+              {
+                "term_id": "automatic_raise",
+                "value": true
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "manager",
+                "text": "Компенсировать последствия пропуска"
+              },
+              {
+                "role_id": "manager",
+                "text": "Выполнить KPI 120% за 7 дней"
+              },
+              {
+                "role_id": "manager",
+                "text": "Сообщать о форс-мажоре сразу"
+              },
+              {
+                "role_id": "director",
+                "text": "Повысить зарплату после выполнения согласованных условий"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "prevent-repeat",
+              "description": "Дополнительная проверяемая мера предотвращения повторного срыва",
+              "direct_commitment_markers": [
+                "предлагаю",
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "компенс",
+                  "последств"
+                ],
+                [
+                  "сразу",
+                  "сообщать"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "opponent_private_phrases": [
+      "Учебные закрытые вводные директора"
+    ]
+  },
+  "snapshot": {
+    "schema_version": "2.0",
+    "session_id": "demo-session-001",
+    "case_id": "demo-next-day-v2",
+    "case_config_version": "demo-1",
+    "player_role_id": "manager",
+    "opponent_role_id": "director",
+    "state": {
+      "turn_count": 0,
+      "stage": "negotiating",
+      "agreement": null,
+      "decision": null,
+      "opponent_progress": null
+    },
+    "transcript": []
+  },
+  "turn_id": "demo-turn-001",
+  "user_text": "Какие условия вы предлагаете?"
+}

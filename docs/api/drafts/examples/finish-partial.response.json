@@ -1,0 +1,62 @@
+{
+  "session_id": "demo-session-001",
+  "outcome": {
+    "kind": "no_agreement",
+    "summary": "Условия обсуждены, взаимного согласия пока нет.",
+    "agreement": null,
+    "commitments": [],
+    "open_points": [],
+    "next_step": null,
+    "reason": null
+  },
+  "judge_verdicts": [
+    {
+      "college": "hiring",
+      "status": "ready",
+      "verdict": {
+        "college": "hiring",
+        "choice": "opponent",
+        "decisive_criterion": "Надёжность",
+        "evidence_turn_id": "demo-turn-001",
+        "evidence_quote": "Какие условия вы предлагаете?",
+        "observation": "Менеджер запросил условия, но не взял обязательств.",
+        "effect": "Проверяемая ответственность ещё не согласована.",
+        "comparison": "Директор назвал условия контроля, менеджер пока ограничился вопросом."
+      },
+      "error_code": null
+    },
+    {
+      "college": "negotiation",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "judge_unavailable"
+    },
+    {
+      "college": "ownership",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "judge_retrieval_unavailable"
+    }
+  ],
+  "trainer_feedback": {
+    "status": "ready",
+    "feedback": {
+      "summary": "Пользователь начал с выяснения условий.",
+      "strengths": [
+        {
+          "evidence_turn_id": "demo-turn-001",
+          "evidence_quote": "Какие условия вы предлагаете?",
+          "action": "Запросил позицию директора.",
+          "situation_change": "Директор назвал измеримые условия.",
+          "consequence": "Появилась основа для следующего предложения."
+        }
+      ],
+      "mistakes": [],
+      "next_try": [
+        "Предложите встречное обязательство и способ его проверки."
+      ],
+      "plan_vs_reality": null
+    },
+    "error_code": null
+  }
+}

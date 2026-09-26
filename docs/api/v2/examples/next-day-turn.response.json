@@ -1,0 +1,57 @@
+{
+  "session_id": "demo-session-001",
+  "turn_id": "demo-turn-001",
+  "status": "accepted",
+  "opponent_text": "Текущие условия — 28 дней контроля и KPI 130%. Назовите встречное обязательство.",
+  "snapshot": {
+    "schema_version": "2.0.0-rc.1",
+    "session_id": "demo-session-001",
+    "case_id": "demo-next-day-v2",
+    "case_config_version": "demo-1",
+    "player_role_id": "manager",
+    "opponent_role_id": "director",
+    "state": {
+      "turn_count": 1,
+      "stage": "negotiating",
+      "agreement": null,
+      "decision": null,
+      "opponent_progress": {
+        "current_step_id": "declared",
+        "satisfied_requirement_ids": [],
+        "last_transition": null
+      }
+    },
+    "transcript": [
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "player",
+        "status": "accepted",
+        "text": "Какие условия вы предлагаете?",
+        "blocked_reason": null,
+        "message_id": "next-day-message-player-001",
+        "created_at": "2026-09-26T10:00:10Z",
+        "elapsed_ms": 10000
+      },
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "opponent",
+        "status": "accepted",
+        "text": "Текущие условия — 28 дней контроля и KPI 130%. Назовите встречное обязательство.",
+        "blocked_reason": null,
+        "message_id": "next-day-message-opponent-001",
+        "created_at": "2026-09-26T10:00:20Z",
+        "elapsed_ms": 20000
+      }
+    ],
+    "revision": 1,
+    "round": {
+      "status": "open",
+      "started_at": "2026-09-26T10:00:00Z",
+      "deadline_at": "2026-09-26T10:05:00Z",
+      "finished_at": null,
+      "end_reason": null
+    }
+  },
+  "error_code": null,
+  "contract_version": "2.0.0-rc.1"
+}

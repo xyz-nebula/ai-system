@@ -1,0 +1,197 @@
+{
+  "case": {
+    "id": "demo-supply-v2",
+    "config_version": "demo-1",
+    "title": "Учебный пример: поставка",
+    "shared_context": "Покупатель и поставщик обсуждают цену и срок поставки. Все значения вымышлены.",
+    "participants": [
+      {
+        "id": "buyer",
+        "name": "Покупатель",
+        "public_context": "Закупает товар",
+        "public_interests": [
+          "Надёжная поставка"
+        ]
+      },
+      {
+        "id": "supplier",
+        "name": "Поставщик",
+        "public_context": "Поставляет товар",
+        "public_interests": [
+          "Оплата поставки"
+        ]
+      }
+    ],
+    "player": {
+      "role_id": "buyer",
+      "private_context": "Учебные вводные покупателя.",
+      "interests": [
+        {
+          "text": "Снизить цену",
+          "visibility": "private"
+        }
+      ],
+      "batna": "Обратиться к другому поставщику."
+    },
+    "opponent": {
+      "role_id": "supplier",
+      "private_context": "Учебные вводные поставщика.",
+      "interests": [
+        {
+          "text": "Предсказуемый объём заказов",
+          "visibility": "private"
+        }
+      ],
+      "batna": "Сохранить текущую цену."
+    },
+    "negotiables": [
+      {
+        "id": "price_per_unit",
+        "label": "Цена за единицу",
+        "value_type": "number",
+        "unit": "RUB/item",
+        "choices": []
+      },
+      {
+        "id": "delivery_days",
+        "label": "Срок поставки",
+        "value_type": "number",
+        "unit": "day",
+        "choices": []
+      }
+    ],
+    "opponent_strategy": {
+      "steps": [
+        {
+          "id": "declared",
+          "kind": "declared",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 5000
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 14
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 14 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 5000 рублей за единицу"
+              }
+            ]
+          },
+          "requires": []
+        },
+        {
+          "id": "target",
+          "kind": "target",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 4800
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 12
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 12 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 4800 рублей за единицу"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "order-volume",
+              "description": "Покупатель гарантирует согласованный объём заказа",
+              "direct_commitment_markers": [
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "объём",
+                  "заказ"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "red-line",
+          "kind": "red_line",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 4600
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 10
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 10 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 4600 рублей за единицу"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "prepayment",
+              "description": "Покупатель берёт обязательство согласованной предоплаты",
+              "direct_commitment_markers": [
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "предоплат"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "opponent_private_phrases": [
+      "Учебные вводные поставщика"
+    ]
+  },
+  "snapshot": {
+    "schema_version": "2.0",
+    "session_id": "demo-supply-session",
+    "case_id": "demo-supply-v2",
+    "case_config_version": "demo-1",
+    "player_role_id": "buyer",
+    "opponent_role_id": "supplier",
+    "state": {
+      "turn_count": 0,
+      "stage": "negotiating",
+      "agreement": null,
+      "decision": null,
+      "opponent_progress": null
+    },
+    "transcript": []
+  },
+  "turn_id": "demo-supply-turn-001",
+  "user_text": "Предлагаю обсудить цену и срок поставки."
+}

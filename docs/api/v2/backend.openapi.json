@@ -1,0 +1,2262 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Arena backend integration — implementation target, NOT deployed",
+    "version": "2.0.0-rc.1",
+    "description": "Design specification, not runtime export. Team acknowledgement pending. Normative semantics: README.md."
+  },
+  "paths": {
+    "/v2/cases": {
+      "get": {
+        "operationId": "backend_get__v2_cases",
+        "summary": "Implementation target: /v2/cases",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "./contract.schema.json#/$defs/PublicCase"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/cases/{case_id}": {
+      "get": {
+        "operationId": "backend_get__v2_cases__case_id_",
+        "summary": "Implementation target: /v2/cases/{case_id}",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "config_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/PublicCase"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions": {
+      "post": {
+        "operationId": "backend_post__v2_sessions",
+        "summary": "Implementation target: /v2/sessions",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CreateSessionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}": {
+      "get": {
+        "operationId": "backend_get__v2_sessions__session_id_",
+        "summary": "Implementation target: /v2/sessions/{session_id}",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/start": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__start",
+        "summary": "Implementation target: /v2/sessions/{session_id}/start",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CommandRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/preparation": {
+      "put": {
+        "operationId": "backend_put__v2_sessions__session_id__preparation",
+        "summary": "Implementation target: /v2/sessions/{session_id}/preparation",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/SavePreparationRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/preparation/review": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__preparation_review",
+        "summary": "Implementation target: /v2/sessions/{session_id}/preparation/review",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CheckPreparationRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/turn": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__turn",
+        "summary": "Implementation target: /v2/sessions/{session_id}/turn",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/TextTurnCommand"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/finish": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__finish",
+        "summary": "Implementation target: /v2/sessions/{session_id}/finish",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CommandRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/commands/{command_id}": {
+      "get": {
+        "operationId": "backend_get__v2_sessions__session_id__commands__command_id_",
+        "summary": "Implementation target: /v2/sessions/{session_id}/commands/{command_id}",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "command_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/result": {
+      "get": {
+        "operationId": "backend_get__v2_sessions__session_id__result",
+        "summary": "Implementation target: /v2/sessions/{session_id}/result",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/FinishResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Finish command still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/events": {
+      "get": {
+        "operationId": "backend_get__v2_sessions__session_id__events",
+        "summary": "Implementation target: /v2/sessions/{session_id}/events",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/replay": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__replay",
+        "summary": "Implementation target: /v2/sessions/{session_id}/replay",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/ReplayRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/sessions/{session_id}/audio-ticket": {
+      "post": {
+        "operationId": "backend_post__v2_sessions__session_id__audio_ticket",
+        "summary": "Implementation target: /v2/sessions/{session_id}/audio-ticket",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/AudioTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/internal/audio/utterances": {
+      "post": {
+        "operationId": "backend_post__v2_internal_audio_utterances",
+        "summary": "Implementation target: /v2/internal/audio/utterances",
+        "security": [
+          {
+            "audioService": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CommandEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/FinalUtterance"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/internal/audio/playback-events": {
+      "post": {
+        "operationId": "backend_post__v2_internal_audio_playback_events",
+        "summary": "Implementation target: /v2/internal/audio/playback-events",
+        "security": [
+          {
+            "audioService": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Acknowledged without body"
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/PlaybackState"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/admin/cases": {
+      "get": {
+        "operationId": "backend_get__v2_admin_cases",
+        "summary": "Implementation target: /v2/admin/cases",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "./contract.schema.json#/$defs/CanonicalCase"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "x-required-role": "admin"
+      },
+      "post": {
+        "operationId": "backend_post__v2_admin_cases",
+        "summary": "Implementation target: /v2/admin/cases",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CanonicalCase"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CanonicalCase"
+              }
+            }
+          }
+        },
+        "x-required-role": "admin"
+      }
+    },
+    "/v2/admin/cases/{case_id}": {
+      "put": {
+        "operationId": "backend_put__v2_admin_cases__case_id_",
+        "summary": "Implementation target: /v2/admin/cases/{case_id}",
+        "security": [
+          {
+            "userJwt": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Arena-Contract-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "const": "2.0.0-rc.1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/CanonicalCase"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error: see normative README policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./contract.schema.json#/$defs/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./contract.schema.json#/$defs/CanonicalCase"
+              }
+            }
+          }
+        },
+        "x-required-role": "admin"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "userJwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "audioService": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

@@ -1,0 +1,1156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena-ai:contract:2.0-draft",
+  "title": "Proposed AI v2 contract — NOT IMPLEMENTED",
+  "description": "Draft only. Cross-field semantic invariants are specified in case-contract-v2-proposal.md. Root validates turn/finish requests; select $defs for other objects.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TurnRequest"
+    },
+    {
+      "$ref": "#/$defs/FinishRequest"
+    }
+  ],
+  "$defs": {
+    "Outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "agreement",
+            "partial_agreement",
+            "deferred",
+            "no_agreement"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agreement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DealTerms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          }
+        },
+        "open_points": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "next_step": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "summary",
+        "agreement",
+        "commitments",
+        "open_points",
+        "next_step",
+        "reason"
+      ]
+    },
+    "JudgeVerdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "enum": [
+            "hiring",
+            "negotiation",
+            "ownership"
+          ]
+        },
+        "choice": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "decisive_criterion": {
+          "enum": [
+            "Надёжность",
+            "Отношение к людям",
+            "Управленческая твёрдость",
+            "Забота о команде",
+            "Долгосрочные последствия управления",
+            "Движение к цели",
+            "Управление другой стороной",
+            "Работа с картиной мира",
+            "Управление ролями",
+            "Сохранение отношений",
+            "Качество решений",
+            "Компетентность",
+            "Ответственность",
+            "Управление рисками",
+            "Последствия для ресурсов"
+          ]
+        },
+        "evidence_turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_quote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "comparison": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "college",
+        "choice",
+        "decisive_criterion",
+        "evidence_turn_id",
+        "evidence_quote",
+        "observation",
+        "effect",
+        "comparison"
+      ]
+    },
+    "JudgeSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "enum": [
+            "hiring",
+            "negotiation",
+            "ownership"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JudgeVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "judge_unavailable",
+                "invalid_judge_output",
+                "judge_retrieval_unavailable",
+                "invalid_judge_retrieval"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "college",
+        "status",
+        "verdict",
+        "error_code"
+      ]
+    },
+    "CoachingPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_quote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "situation_change": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consequence": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "evidence_turn_id",
+        "evidence_quote",
+        "action",
+        "situation_change",
+        "consequence"
+      ]
+    },
+    "PreparationComparisonItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preparation_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "followed",
+            "adapted",
+            "not_observed"
+          ]
+        },
+        "evidence_turn_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_quote": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observation": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "preparation_text",
+        "status",
+        "evidence_turn_id",
+        "evidence_quote",
+        "observation"
+      ]
+    },
+    "PreparationComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreparationComparisonItem"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "summary",
+        "items"
+      ]
+    },
+    "TrainerFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoachingPoint"
+          }
+        },
+        "mistakes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoachingPoint"
+          }
+        },
+        "next_try": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "plan_vs_reality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationComparison"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "summary",
+        "strengths",
+        "mistakes",
+        "next_try",
+        "plan_vs_reality"
+      ]
+    },
+    "TrainerSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        },
+        "feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainerFeedback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "trainer_unavailable",
+                "invalid_trainer_output"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "feedback",
+        "error_code"
+      ]
+    },
+    "FinishResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "judge_verdicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JudgeSlot"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "trainer_feedback": {
+          "$ref": "#/$defs/TrainerSlot"
+        }
+      },
+      "required": [
+        "session_id",
+        "outcome",
+        "judge_verdicts",
+        "trainer_feedback"
+      ]
+    },
+    "Interest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "visibility"
+      ]
+    },
+    "Participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "public_context": {
+          "type": "string"
+        },
+        "public_interests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "public_context",
+        "public_interests"
+      ]
+    },
+    "RoleBrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "private_context": {
+          "type": "string"
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interest"
+          }
+        },
+        "batna": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "role_id",
+        "private_context",
+        "interests",
+        "batna"
+      ]
+    },
+    "Negotiable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_type": {
+          "enum": [
+            "number",
+            "text",
+            "boolean",
+            "choice",
+            "date"
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "value_type",
+        "unit",
+        "choices"
+      ]
+    },
+    "TermValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "term_id",
+        "value"
+      ]
+    },
+    "Commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "role_id",
+        "text"
+      ]
+    },
+    "DealTerms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TermValue"
+          }
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          }
+        }
+      },
+      "required": [
+        "values",
+        "commitments"
+      ]
+    },
+    "ConcessionRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direct_commitment_markers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "evidence_groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "direct_commitment_markers",
+        "evidence_groups"
+      ]
+    },
+    "PositionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "declared",
+            "intermediate",
+            "target",
+            "red_line"
+          ]
+        },
+        "terms": {
+          "$ref": "#/$defs/DealTerms"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConcessionRequirement"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "terms",
+        "requires"
+      ]
+    },
+    "OpponentStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PositionStep"
+          },
+          "minItems": 3
+        }
+      },
+      "required": [
+        "steps"
+      ]
+    },
+    "CaseConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "minItems": 2
+        },
+        "player": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "opponent": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "negotiables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Negotiable"
+          }
+        },
+        "opponent_strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpponentStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opponent_private_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "config_version",
+        "title",
+        "shared_context",
+        "participants",
+        "player",
+        "opponent",
+        "negotiables",
+        "opponent_strategy",
+        "opponent_private_phrases"
+      ]
+    },
+    "PartialDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "partial_agreement"
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          },
+          "minItems": 1
+        },
+        "open_points": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "kind",
+        "commitments",
+        "open_points"
+      ]
+    },
+    "DeferredDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "deferred"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next_step": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "next_step"
+      ]
+    },
+    "AppliedTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "evidence_turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_quote": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "from_step_id",
+        "to_step_id",
+        "requirement_ids",
+        "evidence_turn_id",
+        "evidence_quote"
+      ]
+    },
+    "Progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "current_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "satisfied_requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "last_transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AppliedTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "current_step_id",
+        "satisfied_requirement_ids",
+        "last_transition"
+      ]
+    },
+    "SessionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turn_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stage": {
+          "enum": [
+            "negotiating",
+            "agreed",
+            "partial_agreement",
+            "deferred"
+          ]
+        },
+        "agreement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DealTerms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PartialDecision"
+            },
+            {
+              "$ref": "#/$defs/DeferredDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opponent_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Progress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "turn_count",
+        "stage",
+        "agreement",
+        "decision",
+        "opponent_progress"
+      ]
+    },
+    "TranscriptEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speaker": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "blocked",
+            "safe_reaction"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocked_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "prompt_override",
+                "private_data_request",
+                "hidden_position_request",
+                "physical_harm_threat"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "turn_id",
+        "speaker",
+        "status",
+        "text",
+        "blocked_reason"
+      ]
+    },
+    "SessionSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2.0"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "transcript": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptEntry"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "session_id",
+        "case_id",
+        "case_config_version",
+        "player_role_id",
+        "opponent_role_id",
+        "state",
+        "transcript"
+      ]
+    },
+    "TurnRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {
+          "$ref": "#/$defs/CaseConfig"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "case",
+        "snapshot",
+        "turn_id",
+        "user_text"
+      ]
+    },
+    "FinishRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {
+          "$ref": "#/$defs/CaseConfig"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "preparation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "User preparation as one labelled text string; role is pinned by snapshot."
+        }
+      },
+      "required": [
+        "case",
+        "snapshot"
+      ]
+    },
+    "TurnResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "blocked",
+            "model_error"
+          ]
+        },
+        "opponent_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "turn_id",
+        "status",
+        "opponent_text",
+        "snapshot",
+        "error_code"
+      ]
+    }
+  }
+}

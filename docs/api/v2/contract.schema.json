@@ -1,0 +1,3162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:contract:2.0.0-rc.1",
+  "title": "Arena integration contract 2.0.0-rc.1 — implementation target, awaiting team acknowledgement",
+  "description": "Candidate registry. Select $defs explicitly. Runtime v1 remains separate; cross-field rules are in README.md.",
+  "$defs": {
+    "Outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "agreement",
+            "partial_agreement",
+            "deferred",
+            "no_agreement"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agreement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DealTerms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          }
+        },
+        "open_points": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "next_step": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "analysis_status": {
+          "enum": [
+            "ready",
+            "partial",
+            "failed"
+          ]
+        },
+        "analysis_error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "outcome_analysis_unavailable",
+                "invalid_outcome_analysis"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "concessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourcedAction"
+          },
+          "minItems": 0
+        },
+        "costs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourcedAction"
+          },
+          "minItems": 0
+        },
+        "consequences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Consequence"
+          },
+          "minItems": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "summary",
+        "agreement",
+        "commitments",
+        "open_points",
+        "next_step",
+        "reason",
+        "analysis_status",
+        "analysis_error_code",
+        "concessions",
+        "costs",
+        "consequences",
+        "evidence"
+      ]
+    },
+    "JudgeVerdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "enum": [
+            "hiring",
+            "negotiation",
+            "ownership"
+          ]
+        },
+        "choice": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "decisive_criterion": {
+          "enum": [
+            "Надёжность",
+            "Отношение к людям",
+            "Управленческая твёрдость",
+            "Забота о команде",
+            "Долгосрочные последствия управления",
+            "Движение к цели",
+            "Управление другой стороной",
+            "Работа с картиной мира",
+            "Управление ролями",
+            "Сохранение отношений",
+            "Качество решений",
+            "Компетентность",
+            "Ответственность",
+            "Управление рисками",
+            "Последствия для ресурсов"
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "observation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "comparison": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "college",
+        "choice",
+        "decisive_criterion",
+        "evidence",
+        "observation",
+        "effect",
+        "comparison"
+      ]
+    },
+    "JudgeSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "enum": [
+            "hiring",
+            "negotiation",
+            "ownership"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JudgeVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "judge_unavailable",
+                "invalid_judge_output",
+                "judge_retrieval_unavailable",
+                "invalid_judge_retrieval",
+                "insufficient_evidence"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "college",
+        "status",
+        "verdict",
+        "error_code"
+      ]
+    },
+    "CoachingPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "situation_change": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consequence": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "evidence",
+        "action",
+        "situation_change",
+        "consequence"
+      ]
+    },
+    "PreparationComparisonItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preparation_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "followed",
+            "adapted",
+            "not_observed"
+          ]
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observation": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "preparation_text",
+        "status",
+        "evidence",
+        "observation"
+      ]
+    },
+    "PreparationComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreparationComparisonItem"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "summary",
+        "items"
+      ]
+    },
+    "TrainerFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoachingPoint"
+          }
+        },
+        "mistakes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoachingPoint"
+          }
+        },
+        "next_try": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2,
+          "maxItems": 3
+        },
+        "plan_vs_reality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationComparison"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missed_opportunities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoachingPoint"
+          },
+          "minItems": 0
+        },
+        "goal_assessment": {
+          "$ref": "#/$defs/GoalAssessment"
+        }
+      },
+      "required": [
+        "summary",
+        "strengths",
+        "mistakes",
+        "next_try",
+        "plan_vs_reality",
+        "missed_opportunities",
+        "goal_assessment"
+      ]
+    },
+    "TrainerSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        },
+        "feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainerFeedback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "trainer_unavailable",
+                "invalid_trainer_output",
+                "insufficient_evidence"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "feedback",
+        "error_code"
+      ]
+    },
+    "FinishResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "judge_verdicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JudgeSlot"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "trainer_feedback": {
+          "$ref": "#/$defs/TrainerSlot"
+        },
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        }
+      },
+      "required": [
+        "session_id",
+        "outcome",
+        "judge_verdicts",
+        "trainer_feedback",
+        "contract_version"
+      ]
+    },
+    "Interest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "visibility"
+      ]
+    },
+    "Participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "public_context": {
+          "type": "string"
+        },
+        "public_interests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "public_context",
+        "public_interests"
+      ]
+    },
+    "RoleBrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "private_context": {
+          "type": "string"
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interest"
+          }
+        },
+        "batna": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "negotiation_goal": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declared_position": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "desired_position": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "red_line": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role_preparation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "role_id",
+        "private_context",
+        "interests",
+        "batna",
+        "negotiation_goal",
+        "declared_position",
+        "desired_position",
+        "red_line",
+        "role_preparation"
+      ]
+    },
+    "Negotiable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_type": {
+          "enum": [
+            "number",
+            "text",
+            "boolean",
+            "choice",
+            "date"
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "value_type",
+        "unit",
+        "choices"
+      ]
+    },
+    "TermValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "term_id",
+        "value"
+      ]
+    },
+    "Commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "role_id",
+        "text"
+      ]
+    },
+    "DealTerms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TermValue"
+          }
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          }
+        }
+      },
+      "required": [
+        "values",
+        "commitments"
+      ]
+    },
+    "ConcessionRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direct_commitment_markers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "evidence_groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "direct_commitment_markers",
+        "evidence_groups"
+      ]
+    },
+    "PositionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "declared",
+            "intermediate",
+            "target",
+            "red_line"
+          ]
+        },
+        "terms": {
+          "$ref": "#/$defs/DealTerms"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConcessionRequirement"
+          }
+        },
+        "constraint_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "terms",
+        "requires",
+        "constraint_ids"
+      ]
+    },
+    "OpponentStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PositionStep"
+          },
+          "minItems": 3
+        }
+      },
+      "required": [
+        "steps"
+      ]
+    },
+    "CaseConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "minItems": 2
+        },
+        "player": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "opponent": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "negotiables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Negotiable"
+          }
+        },
+        "opponent_strategy": {
+          "$ref": "#/$defs/OpponentStrategy"
+        },
+        "opponent_private_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "agreement_policy": {
+          "$ref": "#/$defs/AgreementPolicy"
+        },
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "possible_outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PossibleOutcome"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "config_version",
+        "title",
+        "shared_context",
+        "participants",
+        "player",
+        "opponent",
+        "negotiables",
+        "opponent_strategy",
+        "opponent_private_phrases",
+        "agreement_policy",
+        "contract_version",
+        "possible_outcomes"
+      ]
+    },
+    "PartialDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "partial_agreement"
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Commitment"
+          },
+          "minItems": 1
+        },
+        "open_points": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "kind",
+        "commitments",
+        "open_points"
+      ]
+    },
+    "DeferredDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "deferred"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next_step": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "next_step"
+      ]
+    },
+    "AppliedTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "from_step_id",
+        "to_step_id",
+        "requirement_ids",
+        "evidence"
+      ]
+    },
+    "Progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "current_step_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "satisfied_requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "last_transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AppliedTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "current_step_id",
+        "satisfied_requirement_ids",
+        "last_transition"
+      ]
+    },
+    "SessionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turn_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stage": {
+          "enum": [
+            "negotiating",
+            "agreed",
+            "partial_agreement",
+            "deferred"
+          ]
+        },
+        "agreement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DealTerms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PartialDecision"
+            },
+            {
+              "$ref": "#/$defs/DeferredDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opponent_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Progress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "turn_count",
+        "stage",
+        "agreement",
+        "decision",
+        "opponent_progress"
+      ]
+    },
+    "TranscriptEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speaker": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "blocked",
+            "safe_reaction",
+            "interrupted"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "prompt_override",
+                "private_data_request",
+                "hidden_position_request",
+                "physical_harm_threat"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "message_id",
+        "turn_id",
+        "speaker",
+        "status",
+        "text",
+        "created_at",
+        "elapsed_ms",
+        "blocked_reason"
+      ]
+    },
+    "SessionSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "transcript": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptEntry"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "round": {
+          "$ref": "#/$defs/Round"
+        }
+      },
+      "required": [
+        "schema_version",
+        "session_id",
+        "case_id",
+        "case_config_version",
+        "player_role_id",
+        "opponent_role_id",
+        "state",
+        "transcript",
+        "revision",
+        "round"
+      ]
+    },
+    "TurnRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "case": {
+          "$ref": "#/$defs/CaseConfig"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "user_elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "contract_version",
+        "case",
+        "snapshot",
+        "turn_id",
+        "user_text",
+        "user_message_id",
+        "opponent_message_id",
+        "user_created_at",
+        "user_elapsed_ms"
+      ]
+    },
+    "FinishRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "case": {
+          "$ref": "#/$defs/CaseConfig"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "preparation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "case",
+        "snapshot"
+      ]
+    },
+    "TurnResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "blocked",
+            "model_error"
+          ]
+        },
+        "opponent_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SessionSnapshot"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        }
+      },
+      "required": [
+        "session_id",
+        "turn_id",
+        "status",
+        "opponent_text",
+        "snapshot",
+        "error_code",
+        "contract_version"
+      ]
+    },
+    "Evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speaker": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "message_id",
+        "turn_id",
+        "speaker",
+        "elapsed_ms",
+        "quote"
+      ]
+    },
+    "NumericConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "numeric_range"
+        },
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "term_id",
+        "minimum",
+        "maximum"
+      ]
+    },
+    "DateConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "date_range"
+        },
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "term_id",
+        "minimum",
+        "maximum"
+      ]
+    },
+    "ValueConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "allowed_values"
+        },
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "string",
+              "boolean"
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "term_id",
+        "values"
+      ]
+    },
+    "LinearCoefficient": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "term_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coefficient": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "term_id",
+        "coefficient"
+      ]
+    },
+    "LinearConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "linear"
+        },
+        "coefficients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LinearCoefficient"
+          },
+          "minItems": 1
+        },
+        "relation": {
+          "enum": [
+            "le",
+            "ge",
+            "eq"
+          ]
+        },
+        "bound": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "coefficients",
+        "relation",
+        "bound"
+      ]
+    },
+    "Constraint": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/NumericConstraint"
+        },
+        {
+          "$ref": "#/$defs/DateConstraint"
+        },
+        {
+          "$ref": "#/$defs/ValueConstraint"
+        },
+        {
+          "$ref": "#/$defs/LinearConstraint"
+        }
+      ]
+    },
+    "CommitmentRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "role_id",
+        "description"
+      ]
+    },
+    "AgreementPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Constraint"
+          },
+          "minItems": 0
+        },
+        "hard_constraint_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "commitment_rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommitmentRule"
+          },
+          "minItems": 0
+        },
+        "required_commitment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "constraints",
+        "hard_constraint_ids",
+        "commitment_rules",
+        "required_commitment_ids"
+      ]
+    },
+    "RolePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "player_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "player_role_id",
+        "opponent_role_id"
+      ]
+    },
+    "RoleAuthorConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "brief": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "negotiables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Negotiable"
+          },
+          "minItems": 0
+        },
+        "opponent_strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpponentStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agreement_policy": {
+          "$ref": "#/$defs/AgreementPolicy"
+        },
+        "private_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "role_id",
+        "brief",
+        "negotiables",
+        "opponent_strategy",
+        "agreement_policy",
+        "private_phrases"
+      ]
+    },
+    "PossibleOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "agreement",
+            "partial_agreement",
+            "deferred",
+            "no_agreement"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "possible_consequences": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "known_to_role_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "description",
+        "possible_consequences",
+        "visibility",
+        "known_to_role_ids"
+      ]
+    },
+    "CanonicalCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "short_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "difficulty": {
+          "enum": [
+            "easy",
+            "moderate",
+            "hard",
+            "insane"
+          ]
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "minItems": 2
+        },
+        "allowed_role_pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RolePair"
+          },
+          "minItems": 1
+        },
+        "role_configs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoleAuthorConfig"
+          },
+          "minItems": 2
+        },
+        "possible_outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PossibleOutcome"
+          },
+          "minItems": 0
+        },
+        "publication_status": {
+          "enum": [
+            "draft",
+            "published",
+            "archived"
+          ]
+        },
+        "full_description": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "contract_version",
+        "id",
+        "config_version",
+        "title",
+        "short_description",
+        "shared_context",
+        "category",
+        "difficulty",
+        "duration_seconds",
+        "participants",
+        "allowed_role_pairs",
+        "role_configs",
+        "possible_outcomes",
+        "publication_status",
+        "full_description"
+      ]
+    },
+    "PublicCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "short_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "difficulty": {
+          "enum": [
+            "easy",
+            "moderate",
+            "hard",
+            "insane"
+          ]
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "minItems": 2
+        },
+        "allowed_role_pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RolePair"
+          },
+          "minItems": 1
+        },
+        "possible_outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PossibleOutcome"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "config_version",
+        "title",
+        "short_description",
+        "shared_context",
+        "category",
+        "difficulty",
+        "duration_seconds",
+        "participants",
+        "allowed_role_pairs",
+        "possible_outcomes"
+      ]
+    },
+    "Round": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ready",
+            "open",
+            "finishing",
+            "finished"
+          ]
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deadline_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "deadline",
+                "user_finish"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "started_at",
+        "deadline_at",
+        "finished_at",
+        "end_reason"
+      ]
+    },
+    "SourcedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "role_id",
+        "description",
+        "evidence"
+      ]
+    },
+    "Consequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certainty": {
+          "enum": [
+            "observed",
+            "possible"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "description",
+        "certainty",
+        "evidence"
+      ]
+    },
+    "GoalAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "achieved",
+            "partially_achieved",
+            "not_achieved",
+            "not_assessable"
+          ]
+        },
+        "goal_text": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "status",
+        "goal_text",
+        "explanation",
+        "evidence"
+      ]
+    },
+    "PreparationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "minItems": 2
+        },
+        "player": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "case_id",
+        "case_config_version",
+        "title",
+        "shared_context",
+        "participants",
+        "player",
+        "opponent_role_id"
+      ]
+    },
+    "PreparationReviewRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "context": {
+          "$ref": "#/$defs/PreparationContext"
+        },
+        "section_id": {
+          "enum": [
+            "root_conflict",
+            "strategic_goal",
+            "conflict_solutions",
+            "layers",
+            "swot",
+            "negotiation_goal",
+            "declared_position",
+            "desired_position",
+            "red_line",
+            "batna",
+            "scenario",
+            "opening_statement"
+          ]
+        },
+        "block_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "contract_version",
+        "context",
+        "section_id",
+        "block_text",
+        "revision_id"
+      ]
+    },
+    "PreparationFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "improvement_directions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "summary",
+        "strengths",
+        "weaknesses",
+        "questions",
+        "improvement_directions"
+      ]
+    },
+    "PreparationReviewResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "section_id": {
+          "enum": [
+            "root_conflict",
+            "strategic_goal",
+            "conflict_solutions",
+            "layers",
+            "swot",
+            "negotiation_goal",
+            "declared_position",
+            "desired_position",
+            "red_line",
+            "batna",
+            "scenario",
+            "opening_statement"
+          ]
+        },
+        "revision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        },
+        "feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationFeedback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "preparation_review_unavailable",
+                "invalid_preparation_review"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "section_id",
+        "revision_id",
+        "status",
+        "feedback",
+        "error_code"
+      ]
+    },
+    "CreateSessionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "text",
+            "voice"
+          ]
+        },
+        "client_request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "case_id",
+        "case_config_version",
+        "player_role_id",
+        "opponent_role_id",
+        "mode",
+        "client_request_id"
+      ]
+    },
+    "SavePreparationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preparation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preparation_revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "preparation",
+        "preparation_revision"
+      ]
+    },
+    "CheckPreparationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "section_id": {
+          "enum": [
+            "root_conflict",
+            "strategic_goal",
+            "conflict_solutions",
+            "layers",
+            "swot",
+            "negotiation_goal",
+            "declared_position",
+            "desired_position",
+            "red_line",
+            "batna",
+            "scenario",
+            "opening_statement"
+          ]
+        },
+        "block_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "client_request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "section_id",
+        "block_text",
+        "revision_id",
+        "client_request_id"
+      ]
+    },
+    "CommandRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "client_request_id"
+      ]
+    },
+    "TextTurnCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "client_request_id",
+        "text"
+      ]
+    },
+    "PublicMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speaker": {
+          "enum": [
+            "player",
+            "opponent"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "accepted",
+            "blocked",
+            "safe_reaction",
+            "interrupted",
+            "model_error"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "prompt_override",
+                "private_data_request",
+                "hidden_position_request",
+                "physical_harm_threat"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "message_id",
+        "turn_id",
+        "speaker",
+        "status",
+        "text",
+        "created_at",
+        "elapsed_ms",
+        "blocked_reason"
+      ]
+    },
+    "PublicTurnResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "blocked",
+            "model_error",
+            "interrupted"
+          ]
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublicMessage"
+          },
+          "minItems": 0
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "turn_id",
+        "status",
+        "messages",
+        "error_code"
+      ]
+    },
+    "ServiceError": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ]
+    },
+    "CommandEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "command_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "enum": [
+            "turn",
+            "finish",
+            "preparation_review"
+          ]
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "unknown"
+          ]
+        },
+        "result": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PublicTurnResult"
+                },
+                {
+                  "$ref": "#/$defs/FinishResponse"
+                },
+                {
+                  "$ref": "#/$defs/PreparationReviewResponse"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "contract_version",
+        "command_id",
+        "session_id",
+        "operation",
+        "status",
+        "result",
+        "error"
+      ]
+    },
+    "SessionView": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_config_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opponent_role_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_brief": {
+          "$ref": "#/$defs/RoleBrief"
+        },
+        "mode": {
+          "enum": [
+            "text",
+            "voice"
+          ]
+        },
+        "round": {
+          "$ref": "#/$defs/Round"
+        },
+        "server_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "preparation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preparation_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublicMessage"
+          },
+          "minItems": 0
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FinishResponse"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case": {
+          "$ref": "#/$defs/PublicCase"
+        }
+      },
+      "required": [
+        "contract_version",
+        "session_id",
+        "case_id",
+        "case_config_version",
+        "player_role_id",
+        "opponent_role_id",
+        "player_brief",
+        "mode",
+        "round",
+        "server_time",
+        "preparation",
+        "preparation_revision",
+        "messages",
+        "result",
+        "case"
+      ]
+    },
+    "AudioTicket": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ws_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "const": "arena.audio.v2"
+        }
+      },
+      "required": [
+        "ticket",
+        "expires_at",
+        "ws_url",
+        "protocol"
+      ]
+    },
+    "AudioFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "codec": {
+          "const": "pcm_s16le"
+        },
+        "sample_rate": {
+          "const": 24000
+        },
+        "channels": {
+          "const": 1
+        },
+        "bit_depth": {
+          "const": 16
+        }
+      },
+      "required": [
+        "codec",
+        "sample_rate",
+        "channels",
+        "bit_depth"
+      ]
+    },
+    "AudioInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "audio"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "payload": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "type",
+            "sequence",
+            "payload"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "control"
+            },
+            "action": {
+              "enum": [
+                "stop",
+                "close"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "action"
+          ]
+        }
+      ]
+    },
+    "AudioOutput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "transcript"
+            },
+            "utterance_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "final": {
+              "const": true
+            },
+            "started_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "ended_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "type",
+            "utterance_id",
+            "text",
+            "final",
+            "started_at",
+            "ended_at"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "audio_frame"
+            },
+            "playback_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "format": {
+              "$ref": "#/$defs/AudioFormat"
+            },
+            "payload": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "type",
+            "playback_id",
+            "sequence",
+            "timestamp",
+            "format",
+            "payload"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "state"
+            },
+            "state": {
+              "enum": [
+                "listening",
+                "transcribing",
+                "waiting",
+                "playing",
+                "stopped"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "state"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "message"
+          ]
+        }
+      ]
+    },
+    "FinalUtterance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "audio_ticket": {
+          "type": "string",
+          "minLength": 1
+        },
+        "utterance_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "audio_ticket",
+        "utterance_id",
+        "text",
+        "started_at",
+        "ended_at"
+      ]
+    },
+    "PlaybackRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "playback_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deadline_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "session_id",
+        "turn_id",
+        "message_id",
+        "playback_id",
+        "text",
+        "deadline_at"
+      ]
+    },
+    "StopPlaybackRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "enum": [
+            "deadline",
+            "user_finish"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "reason"
+      ]
+    },
+    "PlaybackState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "playback_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "playing",
+            "completed",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "playback_id",
+        "status",
+        "at",
+        "error_code"
+      ]
+    },
+    "ReplayRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "client_request_id"
+      ]
+    },
+    "SessionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "session",
+            "command",
+            "message",
+            "round_ended"
+          ]
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SessionView"
+            },
+            {
+              "$ref": "#/$defs/CommandEnvelope"
+            },
+            {
+              "$ref": "#/$defs/PublicMessage"
+            },
+            {
+              "$ref": "#/$defs/Round"
+            }
+          ]
+        }
+      },
+      "required": [
+        "event_id",
+        "session_id",
+        "type",
+        "payload"
+      ]
+    },
+    "ServiceInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "2.0.0-rc.1"
+        },
+        "mode": {
+          "enum": [
+            "demo",
+            "qwen"
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supported_routes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "contract_version",
+        "mode",
+        "model",
+        "supported_routes"
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "session_id": "demo-session-001",
+  "turn_id": "demo-turn-001",
+  "status": "accepted",
+  "opponent_text": "Текущие условия — 28 дней контроля и KPI 130%. Назовите встречное обязательство.",
+  "snapshot": {
+    "schema_version": "2.0",
+    "session_id": "demo-session-001",
+    "case_id": "demo-next-day-v2",
+    "case_config_version": "demo-1",
+    "player_role_id": "manager",
+    "opponent_role_id": "director",
+    "state": {
+      "turn_count": 1,
+      "stage": "negotiating",
+      "agreement": null,
+      "decision": null,
+      "opponent_progress": {
+        "current_step_id": "declared",
+        "satisfied_requirement_ids": [],
+        "last_transition": null
+      }
+    },
+    "transcript": [
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "player",
+        "status": "accepted",
+        "text": "Какие условия вы предлагаете?",
+        "blocked_reason": null
+      },
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "opponent",
+        "status": "accepted",
+        "text": "Текущие условия — 28 дней контроля и KPI 130%. Назовите встречное обязательство.",
+        "blocked_reason": null
+      }
+    ]
+  },
+  "error_code": null
+}

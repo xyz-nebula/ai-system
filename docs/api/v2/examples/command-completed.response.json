@@ -1,0 +1,35 @@
+{
+  "contract_version": "2.0.0-rc.1",
+  "command_id": "demo-command-turn-1",
+  "session_id": "demo-session-001",
+  "operation": "turn",
+  "status": "completed",
+  "result": {
+    "turn_id": "demo-turn-001",
+    "status": "accepted",
+    "messages": [
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "player",
+        "status": "accepted",
+        "text": "Какие условия вы предлагаете?",
+        "blocked_reason": null,
+        "message_id": "next-day-message-player-001",
+        "created_at": "2026-09-26T10:00:10Z",
+        "elapsed_ms": 10000
+      },
+      {
+        "turn_id": "demo-turn-001",
+        "speaker": "opponent",
+        "status": "accepted",
+        "text": "Текущие условия — 28 дней контроля и KPI 130%. Назовите встречное обязательство.",
+        "blocked_reason": null,
+        "message_id": "next-day-message-opponent-001",
+        "created_at": "2026-09-26T10:00:20Z",
+        "elapsed_ms": 20000
+      }
+    ],
+    "error_code": null
+  },
+  "error": null
+}

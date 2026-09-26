@@ -1,0 +1,47 @@
+{
+  "id": "demo-next-day-v2",
+  "config_version": "demo-1",
+  "title": "Учебный пример: разговор о повышении",
+  "short_description": "Вымышленный пример для адаптеров, не авторский production-кейс.",
+  "shared_context": "Менеджер и директор обсуждают повышение после отсутствия на работе. В ситуации участвует HR. Это вымышленный пример конфигурации для проектирования интерфейса, не утверждённые вводные кейса.",
+  "category": "Работа и карьера",
+  "difficulty": "moderate",
+  "duration_seconds": 300,
+  "participants": [
+    {
+      "id": "manager",
+      "name": "Менеджер",
+      "public_context": "Менеджер по продажам",
+      "public_interests": [
+        "Сохранить рабочие отношения"
+      ]
+    },
+    {
+      "id": "director",
+      "name": "Генеральный директор",
+      "public_context": "Принимает решение о повышении",
+      "public_interests": [
+        "Предсказуемость работы"
+      ]
+    },
+    {
+      "id": "hr",
+      "name": "HR",
+      "public_context": "Участник ситуации, не активный собеседник",
+      "public_interests": [
+        "Сохранить сотрудника и трудовую дисциплину"
+      ]
+    }
+  ],
+  "allowed_role_pairs": [
+    {
+      "player_role_id": "manager",
+      "opponent_role_id": "director"
+    },
+    {
+      "player_role_id": "director",
+      "opponent_role_id": "manager"
+    }
+  ],
+  "possible_outcomes": []
+}

@@ -1,0 +1,9 @@
+{
+  "contract_version": "2.0.0-rc.1",
+  "command_id": "demo-command-turn-1",
+  "session_id": "demo-session-001",
+  "operation": "turn",
+  "status": "queued",
+  "result": null,
+  "error": null
+}

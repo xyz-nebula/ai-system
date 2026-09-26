@@ -1,0 +1,16 @@
+{
+  "status": "TEMPLATE_NOT_DEPLOYED",
+  "contract_version": "2.0.0-rc.1",
+  "modules": {
+    "ai": {"repository": "xyz-nebula/ai-system", "commit": null, "image_digest": null, "base_url": null, "live_health_url": null, "ready_health_url": null, "owner": null},
+    "backend": {"repository": "xyz-nebula/backend", "commit": null, "image_digest": null, "base_url": null, "live_health_url": null, "ready_health_url": null, "owner": null},
+    "frontend": {"repository": "xyz-nebula/front-end", "commit": null, "image_digest": null, "base_url": null, "owner": null},
+    "admin": {"repository": "xyz-nebula/admin-frontend", "commit": null, "image_digest": null, "base_url": null, "owner": null},
+    "audio": {"repository": "xyz-nebula/audio-engine", "commit": null, "image_digest": null, "base_url": null, "live_health_url": null, "ready_health_url": null, "owner": null}
+  },
+  "proxy": {"browser_backend_prefix": null, "browser_audio_prefix": null, "tls_certificate_reference": null},
+  "cases": [{"case_id": null, "config_version": null, "author": null, "expert_approved": false}],
+  "secret_references_only": {"ai_service_bearer": null, "backend_audio_bearer": null, "audio_backend_bearer": null, "user_jwt_key": null, "audio_ticket_signing_key": null},
+  "database": {"migration_revision": null, "backup_reference": null, "restore_tested": false},
+  "rollout": {"owner": null, "window": null, "v1_release_manifest_reference": null, "v2_session_rollback_policy": null, "smoke_passed": false, "load_test_report_reference": null}
+}
