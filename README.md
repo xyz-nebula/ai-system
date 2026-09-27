@@ -191,6 +191,7 @@ Audio Engine озвучивает только проверенный ответ
 
 - [Единый документ интеграции v2 для всех команд: задачи, маршруты и все поля](docs/integration/unified-integration-guide.md)
 - [Простая оценка диалога POST /v2/evaluate: запрос, ответ и пример вызова](docs/integration/simple-evaluation-request.md)
+- [Текущий отдельный серверный стенд v2 на 8002 и задачи Backend/Frontend](docs/integration/staging-v2-checklist.md)
 - [Подключение существующего v1](docs/integration/team-integration.md)
 - [API-контракт и примеры](docs/api/README.md)
 - [Сценарий вызовов: CaseConfig → turn → snapshot → finish](docs/api/usage-flow.md)
