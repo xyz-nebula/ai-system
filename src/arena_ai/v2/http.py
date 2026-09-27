@@ -8,7 +8,17 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
-from arena_ai.v2.contracts import TurnRequest, TurnResponse
+from arena_ai.judge_retrieval import JudgeRetrieval
+from arena_ai.v2.contracts import FinishRequest, TurnRequest, TurnResponse
+from arena_ai.v2.finish import analyze_finish
+from arena_ai.v2.finish_response import FinishResponse
+from arena_ai.v2.judges import judge_finish
+from arena_ai.v2.preparation import (
+    PreparationReviewRequest,
+    PreparationReviewResponse,
+    review_preparation,
+)
+from arena_ai.v2.trainer import train_finish
 from arena_ai.v2.turn import QwenTurnPipeline
 
 
@@ -17,6 +27,7 @@ def install_turn_route(
     pipeline: QwenTurnPipeline,
     authorize: Callable[[HTTPAuthorizationCredentials | None], Awaitable[None]],
     bearer: HTTPBearer,
+    retrieval: JudgeRetrieval,
 ) -> None:
     def error(status: int, code: str, message: str) -> JSONResponse:
         return JSONResponse(
@@ -28,6 +39,24 @@ def install_turn_route(
             },
             headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
+
+    @app.post("/v2/preparation/review", operation_id="ai_post__v2_preparation_review")
+    async def preparation_review(
+        raw: Request,
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)],
+    ) -> Response:
+        try:
+            await authorize(credentials)
+        except HTTPException:
+            return error(401, "unauthorized", "Unauthorized")
+        if raw.headers.get("X-Arena-Contract-Version") != "2.0.0-rc.1":
+            return error(409, "contract_version_mismatch", "Unsupported contract version")
+        try:
+            request = PreparationReviewRequest.model_validate_json(await raw.body())
+        except ValueError:
+            return error(422, "invalid_request", "Invalid preparation review request")
+        result = await review_preparation(request, pipeline.analysis)
+        return Response(result.model_dump_json(), media_type="application/json")
 
     @app.post("/v2/turn", response_model=TurnResponse, operation_id="ai_post__v2_turn")
     async def turn(
@@ -55,6 +84,39 @@ def install_turn_route(
         result = await pipeline.turn(request)
         # Serialize exact Decimal values directly; never use a float JSON round-trip.
         return Response(result.model_dump_json(), media_type="application/json")
+
+    @app.post("/v2/finish", operation_id="ai_post__v2_finish")
+    async def finish(
+        raw: Request,
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)],
+    ) -> Response:
+        try:
+            await authorize(credentials)
+        except HTTPException:
+            return error(401, "unauthorized", "Unauthorized")
+        if raw.headers.get("X-Arena-Contract-Version") != "2.0.0-rc.1":
+            return error(409, "contract_version_mismatch", "Unsupported contract version")
+        try:
+            request = FinishRequest.model_validate_json(await raw.body())
+        except ValidationError as invalid:
+            if any(
+                item["loc"] == ()
+                and str(item.get("ctx", {}).get("error")) == "Finish requires a frozen round"
+                for item in invalid.errors(include_input=False)
+            ):
+                return error(409, "round_not_closed", "Round is not frozen")
+            return error(422, "invalid_request", "Invalid finish request")
+        except ValueError:
+            return error(422, "invalid_request", "Invalid finish request")
+        result = await analyze_finish(request, pipeline.analysis)
+        result["judge_verdicts"] = await judge_finish(
+            request, pipeline.judge, retrieval, pipeline.analysis
+        )
+        result["trainer_feedback"] = (await train_finish(request, pipeline.analysis)).model_dump(
+            mode="python"
+        )
+        response = FinishResponse.model_validate(result)
+        return Response(response.model_dump_json(), media_type="application/json")
 
 
 class ArenaApp(FastAPI):
@@ -105,4 +167,51 @@ class ArenaApp(FastAPI):
                     "application/json": {"schema": {"$ref": "#/components/schemas/V2ServiceError"}}
                 },
             }
+        if "/v2/finish" in schema["paths"]:
+            finish_schema = FinishRequest.model_json_schema(
+                ref_template="#/components/schemas/V2{model}"
+            )
+            for name, definition in finish_schema.pop("$defs", {}).items():
+                components[f"V2{name}"] = definition
+            components["V2FinishRequest"] = finish_schema
+            finish = schema["paths"]["/v2/finish"]["post"]
+            finish["requestBody"] = {
+                "required": True,
+                "content": {
+                    "application/json": {"schema": {"$ref": "#/components/schemas/V2FinishRequest"}}
+                },
+            }
+            finish["parameters"] = operation["parameters"]
+            response_schema = FinishResponse.model_json_schema(
+                ref_template="#/components/schemas/V2{model}"
+            )
+            for name, definition in response_schema.pop("$defs", {}).items():
+                components[f"V2{name}"] = definition
+            components["V2FinishResponse"] = response_schema
+            finish["responses"]["200"]["content"]["application/json"]["schema"] = {
+                "$ref": "#/components/schemas/V2FinishResponse"
+            }
+            for status in (401, 409, 422):
+                finish["responses"][str(status)] = operation["responses"][str(status)]
+        if "/v2/preparation/review" in schema["paths"]:
+            review = schema["paths"]["/v2/preparation/review"]["post"]
+            for model in (PreparationReviewRequest, PreparationReviewResponse):
+                definition = model.model_json_schema(ref_template="#/components/schemas/V2{model}")
+                for name, child in definition.pop("$defs", {}).items():
+                    components[f"V2{name}"] = child
+                components[f"V2{model.__name__}"] = definition
+            review["requestBody"] = {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/V2PreparationReviewRequest"}
+                    }
+                },
+            }
+            review["responses"]["200"]["content"]["application/json"]["schema"] = {
+                "$ref": "#/components/schemas/V2PreparationReviewResponse"
+            }
+            review["parameters"] = operation["parameters"]
+            for status in (401, 409, 422):
+                review["responses"][str(status)] = operation["responses"][str(status)]
         return schema

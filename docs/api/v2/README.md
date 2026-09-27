@@ -8,7 +8,9 @@
 
 Текущий срез кода — строгие модели AI-кейса/снимка, TurnRequest/FinishRequest,
 детерминированные проверки и отдельные контексты Guard/Opponent/Judge/Trainer,
-и opt-in HTTP управляемого хода, но не готовые finish/судьи/Trainer v2.
+и opt-in HTTP управляемого хода. Добавлен начальный finish: фактический исход,
+проверяемый анализ и три судейских слота с retrieval. Полный finish/Trainer v2
+и сквозная приёмка ещё не завершены.
 Включение, бюджет и ограничения описаны в [HTTP runtime v2](runtime.md).
 В `arena_ai.v2.turn.QwenTurnPipeline` реализован кандидат negotiating-хода:
 Guard → Opponent → Validator, пара сообщений и revision+1 только после проверки,

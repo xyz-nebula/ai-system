@@ -13,6 +13,10 @@ class ModelResponseError(RuntimeError):
     """Safe transport/format failure without gateway bodies or private context."""
 
 
+class ModelOutputError(ModelResponseError):
+    """The gateway responded, but its output did not satisfy the requested contract."""
+
+
 class JsonChat:
     def __init__(
         self,
@@ -74,5 +78,7 @@ class JsonChat:
             if fenced is not None:
                 content = fenced.group("json")
             return response_type.model_validate_json(content)
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        except httpx.HTTPError:
             raise ModelResponseError("Model JSON response unavailable") from None
+        except (ValueError, KeyError, IndexError, TypeError):
+            raise ModelOutputError("Invalid model JSON response") from None

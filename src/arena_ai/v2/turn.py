@@ -152,6 +152,22 @@ class QwenTurnPipeline:
             extra_body=settings.fast_extra_body,
         )
         self.validator = QwenOfferValidator.from_settings(http, settings)
+        self.analysis = JsonChat(
+            http,
+            chat_url=settings.chat_url,
+            model=settings.model,
+            api_key=settings.api_key,
+            json_mode=settings.json_mode,
+            extra_body=settings.reasoned_extra_body,
+        )
+        self.judge = JsonChat(
+            http,
+            chat_url=settings.chat_url,
+            model=settings.model,
+            api_key=settings.api_key,
+            json_mode=settings.json_mode,
+            extra_body={**settings.reasoned_extra_body, **(settings.judge_extra_body or {})},
+        )
         self.agreement_validator = QwenAgreementValidator(http, settings)
         self.decision_validator = QwenDecisionValidator(http, settings)
 

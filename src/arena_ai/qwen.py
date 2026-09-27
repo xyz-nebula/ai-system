@@ -118,6 +118,7 @@ class QwenSettings:
     fast_extra_body: dict[str, object]
     reasoned_extra_body: dict[str, object]
     model_attempts: int
+    judge_extra_body: dict[str, object] | None = None
 
     @classmethod
     def from_env(cls) -> "QwenSettings":
@@ -143,6 +144,7 @@ class QwenSettings:
             fast_extra_body=extra_body_from_env("ARENA_QWEN_FAST_EXTRA_BODY"),
             reasoned_extra_body=extra_body_from_env("ARENA_QWEN_REASONED_EXTRA_BODY"),
             model_attempts=bounded_int_from_env("ARENA_MODEL_MAX_ATTEMPTS", "2", 1, 3),
+            judge_extra_body=extra_body_from_env("ARENA_QWEN_JUDGE_EXTRA_BODY"),
         )
 
 
