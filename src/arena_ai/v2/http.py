@@ -10,6 +10,9 @@ from pydantic import ValidationError
 
 from arena_ai.judge_retrieval import JudgeRetrieval
 from arena_ai.v2.contracts import FinishRequest, TurnRequest, TurnResponse
+from arena_ai.v2.evaluation import evaluate_dialogue
+from arena_ai.v2.evaluation_request import EvaluationRequest
+from arena_ai.v2.evaluation_response import EvaluationResponse
 from arena_ai.v2.finish import analyze_finish
 from arena_ai.v2.finish_response import FinishResponse
 from arena_ai.v2.judges import judge_finish
@@ -39,6 +42,24 @@ def install_turn_route(
             },
             headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
+
+    @app.post("/v2/evaluate", operation_id="ai_post__v2_evaluate")
+    async def evaluate(
+        raw: Request,
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)],
+    ) -> Response:
+        try:
+            await authorize(credentials)
+        except HTTPException:
+            return error(401, "unauthorized", "Unauthorized")
+        if raw.headers.get("X-Arena-Contract-Version") != "2.0.0-rc.1":
+            return error(409, "contract_version_mismatch", "Unsupported contract version")
+        try:
+            request = EvaluationRequest.model_validate_json(await raw.body())
+        except ValueError:
+            return error(422, "invalid_request", "Invalid evaluation request")
+        result = await evaluate_dialogue(request, pipeline.analysis, pipeline.judge, retrieval)
+        return Response(result.model_dump_json(), media_type="application/json")
 
     @app.post("/v2/preparation/review", operation_id="ai_post__v2_preparation_review")
     async def preparation_review(
@@ -214,4 +235,25 @@ class ArenaApp(FastAPI):
             review["parameters"] = operation["parameters"]
             for status in (401, 409, 422):
                 review["responses"][str(status)] = operation["responses"][str(status)]
+        if "/v2/evaluate" in schema["paths"]:
+            evaluate = schema["paths"]["/v2/evaluate"]["post"]
+            for model in (EvaluationRequest, EvaluationResponse):
+                definition = model.model_json_schema(ref_template="#/components/schemas/V2{model}")
+                for name, child in definition.pop("$defs", {}).items():
+                    components[f"V2{name}"] = child
+                components[f"V2{model.__name__}"] = definition
+            evaluate["requestBody"] = {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/V2EvaluationRequest"}
+                    }
+                },
+            }
+            evaluate["responses"]["200"]["content"]["application/json"]["schema"] = {
+                "$ref": "#/components/schemas/V2EvaluationResponse"
+            }
+            evaluate["parameters"] = operation["parameters"]
+            for status in (401, 409, 422):
+                evaluate["responses"][str(status)] = operation["responses"][str(status)]
         return schema

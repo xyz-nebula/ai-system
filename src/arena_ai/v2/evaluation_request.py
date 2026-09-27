@@ -1,6 +1,5 @@
-"""Portable Pydantic 2 request models for the proposed /v2/evaluate endpoint.
+"""Portable Pydantic 2 request models for the /v2/evaluate endpoint.
 
-This module defines the request only; the HTTP endpoint is not implemented yet.
 It can be copied into Backend without importing arena_ai.
 """
 

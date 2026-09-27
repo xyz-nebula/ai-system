@@ -1,7 +1,8 @@
 # Упрощённый запрос оценки диалога
 
-Формат запроса согласован. Предлагаемый маршрут: `POST /v2/evaluate`.
-**Маршрут пока не реализован и не развёрнут.** Существующий `/v2/finish` не изменён.
+Формат запроса согласован. Маршрут: `POST /v2/evaluate`.
+**Реализован в коде; серверный rollout и полная живая приёмка ещё не завершены.**
+Существующие `/v2/finish` и `/v2/turn` не изменяют свой контракт.
 Этот запрос предназначен для оценки готового диалога, не для ответа AI-оппонента.
 
 ## Pydantic-модель для Backend
@@ -41,7 +42,115 @@
 
 По такому запросу исход переговоров можно оценить по тексту, но это не подтверждение
 сохранённой Backend сделки. Здесь нет достоверных временных меток или состояния сделки;
-AI не должен их выдумывать. Договор об ответе и подключение HTTP-маршрута — следующий шаг.
+AI не должен их выдумывать. Успешный ответ не подтверждает исполнение обязательств.
 
 Тренерский разбор после диалога использует `preparations` для сопоставления плана с действиями.
 Проверка блока подготовки до диалога остаётся отдельной операцией `/v2/preparation/review`.
+
+## Вызов из Backend
+
+Маршрут доступен при `ARENA_MODEL_MODE=qwen`, `ARENA_V2_ENABLED=true` и настроенном
+`ARENA_SERVICE_TOKEN`. Запрос идёт в **AI-сервис**, не в `/v1/chat/completions` LocalAI.
+Пользовательский JWT проверяет Backend; AI получает существующий внутренний сервисный
+токен. Не помещать его в браузер. Версия задаётся заголовком, не новым полем запроса.
+
+Сохраните JSON выше в `evaluation-request.json` и выполните:
+
+```bash
+curl --request POST "$AI_BASE_URL/v2/evaluate" \
+  --header "Authorization: Bearer $ARENA_SERVICE_TOKEN" \
+  --header 'X-Arena-Contract-Version: 2.0.0-rc.1' \
+  --header 'Content-Type: application/json' \
+  --data-binary @evaluation-request.json
+```
+
+`AI_BASE_URL` — адрес AI-сервиса, согласованный после деплоя.
+Этот документ не подтверждает доступность маршрута на сервере.
+
+## Ответ
+
+Pydantic: [EvaluationResponse](../../src/arena_ai/v2/evaluation_response.py).
+Для генерации клиента без импортов AI-проекта:
+[самостоятельный реестр JSON Schema](../api/v2/evaluation.schema.json),
+корни `$defs.EvaluationRequest` и `$defs.EvaluationResponse`.
+Полные схемы запроса, ответа и ошибок опубликованы в рабочем `/openapi.json`
+при включённом v2. Это дополнительный runtime-маршрут; исторические файлы
+`docs/api/v2/ai.openapi.json` и `contract.schema.json` не заменены новой схемой.
+
+Корневые поля:
+
+- `contract_version`: `2.0.0-rc.1`.
+- `outcome`: `basis="dialogue_inference"`, `status`, nullable `assessment`, nullable `error_code`.
+  `assessment`: `kind` (`agreement`, `partial_agreement`, `deferred`, `no_agreement`,
+  `not_assessable`), `summary`, `agreed_terms`, `open_points`, nullable `next_step`, `evidence`.
+  `not_assessable` — проверенный вывод о недостаточности данных, не сбой модели.
+- `judge_verdicts`: ровно три слота в порядке `hiring`, `negotiation`, `ownership`.
+  Слот: `college`, `status`, nullable `verdict`, nullable `error_code`.
+  Вердикт: `college`, `choice` (`player`/`opponent`), `decisive_criterion`, `evidence`,
+  `observation`, `effect`, `comparison`. Ссылки и методички не выводятся.
+- `trainer_feedback`: `status`, nullable `feedback`, nullable `error_code`.
+  Feedback: `summary`, `strengths`, `mistakes`, `missed_opportunities`, `next_try`,
+  nullable `plan_vs_reality`, `goal_assessment`. Смысловые поля сохранены
+  из `/v2/finish`, но доказательства относятся к индексам исходного списка.
+
+Каждое доказательство имеет ровно три поля:
+
+```json
+{"message_index": 0, "is_ai": false, "quote": "Какие условия повышения вы предлагаете?"}
+```
+
+Индекс начинается с **нуля** и относится к неизменённому списку `messages` запроса.
+Для UI используйте этот индекс для поиска реплики. Нет `session_id`, `turn_id`,
+`message_id`, `elapsed_ms` или синтетических временных меток.
+Backend связывает ответ со своим Chat и версией сохранённого диалога самостоятельно.
+
+Для каждого слота: `ready` означает проверенный результат и `error_code=null`;
+`failed` означает `assessment`/`verdict`/`feedback=null` и заполненный код ошибки.
+Не отображайте несуществующий результат как полноценную оценку и не заменяйте
+failed исход на «договорённость не достигнута».
+
+## Ошибки и ограничения
+
+- HTTP `401`: `unauthorized` — нет/неверен внутренний токен.
+- HTTP `409`: `contract_version_mismatch` — нет/неверен заголовок версии.
+- HTTP `422`: `invalid_request` — некорректный запрос; внешние зависимости не вызываются.
+- HTTP `200`: запрос принят; каждый слот отдельно может быть `ready` или `failed`.
+  Ошибки исхода: `outcome_analysis_unavailable`, `invalid_outcome_analysis`.
+  Судьи: `judge_unavailable`, `invalid_judge_output`, `judge_retrieval_unavailable`,
+  `invalid_judge_retrieval`, `insufficient_evidence`.
+  Тренер: `trainer_unavailable`, `invalid_trainer_output`, `insufficient_evidence`.
+
+Без реплик обеих сторон судьи возвращают `insufficient_evidence` без модельного
+судейства; без пользовательских реплик Trainer возвращает такой же код.
+Без `preparations` Trainer не выдумывает цель или подготовку.
+Исход, каждый судья и Trainer используют генерацию и отдельную смысловую проверку
+с общим лимитом **60 секунд на слот**, включая поиск для судьи.
+Вызовы последовательные: запрос потенциально занимает до примерно **300 секунд**
+обработки, не считая транспорта. Это не измеренная задержка; Backend должен учитывать
+долгий запрос и не делать автоматические повторы без контроля дублей и нагрузки.
+Подготовка передаётся только Trainer, не исходу и не судьям.
+
+Используются существующие профили Qwen и проверенный корпус методологии через
+Qdrant/эмбеддинги. Проверяющая модель та же: отдельная проверка — дополнительный
+барьер, не гарантия истины. Локальные HTTP-тесты используют внешние doubles;
+живая приёмка нового маршрута и настоящего серверного retrieval ещё необходима.
+
+### Последняя живая проверка (2026-09-27)
+
+LocalAI `qwen3.8-9b-q4` доступен через SSH-туннель. На коротком синтетическом диалоге
+полный HTTP-прогон занял 56.77 с и **не прошёл**: исход `agreement` опубликован после
+проверки, как минимум hiring отклонён с `invalid_judge_output`. Три ready не получены.
+Отдельный HTTP-прогон настоящей генерации и проверки Trainer прошёл за 20.00 с:
+индексная цитата валидна, явно записанная цель согласовать цену/срок оценена achieved.
+В полном прогоне retrieval тестовый; в отдельном прогоне остальные роли недоступны
+через внешние doubles. Это не серверный RAG, нагрузочная приёмка или деплой AI-сервиса.
+Гейты и лимиты не ослаблены, повторов «до accept» нет.
+
+Повторить отдельно с уже настроенными URL/model и профилями LocalAI:
+
+```bash
+ARENA_RUN_LIVE_V2=1 uv run pytest -q tests/test_v2_evaluate_http.py -k live
+```
+
+Обычный pytest не обращается к общему LocalAI. Положительный полный live-тест остаётся
+критерием готовности и пока красный; наличие маршрута не означает стабильное судейство.

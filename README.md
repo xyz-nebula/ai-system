@@ -190,6 +190,7 @@ Audio Engine озвучивает только проверенный ответ
 это не свежий полный прогон после последней правки и не подтверждение их деплоя.
 
 - [Единый документ интеграции v2 для всех команд: задачи, маршруты и все поля](docs/integration/unified-integration-guide.md)
+- [Простая оценка диалога POST /v2/evaluate: запрос, ответ и пример вызова](docs/integration/simple-evaluation-request.md)
 - [Подключение существующего v1](docs/integration/team-integration.md)
 - [API-контракт и примеры](docs/api/README.md)
 - [Сценарий вызовов: CaseConfig → turn → snapshot → finish](docs/api/usage-flow.md)
