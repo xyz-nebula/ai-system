@@ -5,6 +5,7 @@ import json
 import httpx
 
 from arena_ai.qwen import JSON_FENCE
+from arena_ai.v2.budget import current_budget
 from arena_ai.v2.contracts import Contract
 
 
@@ -37,6 +38,11 @@ class JsonChat:
         context: Contract,
         response_type: type[T],
     ) -> T:
+        budget = current_budget.get()
+        if budget is not None:
+            if budget.remaining <= 0:
+                raise ModelResponseError("Model call budget exhausted")
+            budget.remaining -= 1
         body = {
             **self.extra_body,
             "model": self.model,

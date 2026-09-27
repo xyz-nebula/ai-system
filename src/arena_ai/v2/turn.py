@@ -1,5 +1,7 @@
 """Checked candidate turns with mutual full, partial and deferred decisions."""
 
+import asyncio
+import math
 from typing import Literal, Self
 
 import httpx
@@ -8,6 +10,7 @@ from pydantic import model_validator
 from arena_ai.qwen import QwenSettings
 from arena_ai.v2.agreement_validator import AgreementValidationError, QwenAgreementValidator
 from arena_ai.v2.agreements import check_agreement, check_decision
+from arena_ai.v2.budget import ModelBudget, current_budget
 from arena_ai.v2.chat import JsonChat, ModelResponseError
 from arena_ai.v2.contexts import for_guard, for_opponent
 from arena_ai.v2.contracts import (
@@ -66,6 +69,10 @@ OPPONENT = """[V2_OPPONENT]
 изменённые значения предметов торга в тексте при terms=null. Для вопроса без пакета
 условий terms=null. Частичные обязательства без значений предметов торга хранятся
 в resolution.commitments, а не в terms.
+Объявление своих текущих или стартовых условий — тоже предложение пакета, а не
+просто приветствие или контекст. В таком ответе terms содержит ВСЕ значения
+текущего пакета, position_transition=null и resolution=null. terms — проверяемое
+предложение, НЕ итог сделки: отсутствие согласия пользователя не разрешает null.
 Если в ответе называешь/предлагаешь цену, срок, KPI или любое значение предмета
 торга, terms ОБЯЗАТЕЛЬНО должен содержать полный структурированный пакет.
 Это действует и для исходной declared: предложение цены 5000 и срока 14 дней
@@ -119,7 +126,23 @@ resolution={"kind":"partial_agreement","commitments":[{"role_id":"ROLE_ID",
 
 
 class QwenTurnPipeline:
-    def __init__(self, http: httpx.AsyncClient, settings: QwenSettings) -> None:
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        settings: QwenSettings,
+        *,
+        total_timeout_seconds: float = 60,
+        max_model_calls: int = 8,
+    ) -> None:
+        if not math.isfinite(total_timeout_seconds) or total_timeout_seconds <= 0:
+            raise ValueError("Total turn timeout must be finite and positive")
+        if not 1 <= max_model_calls <= 16:
+            raise ValueError("Model call limit must be between 1 and 16")
+        self.total_timeout_seconds = total_timeout_seconds
+        self.max_model_calls = max_model_calls
+        if not 1 <= settings.model_attempts <= 3:
+            raise ValueError("Model attempts must be between 1 and 3")
+        self.model_attempts = settings.model_attempts
         self.fast = JsonChat(
             http,
             chat_url=settings.chat_url,
@@ -133,7 +156,16 @@ class QwenTurnPipeline:
         self.decision_validator = QwenDecisionValidator(http, settings)
 
     async def turn(self, request: TurnRequest) -> TurnResponse:
-        error = "guard_model_error"
+        token = current_budget.set(ModelBudget(self.max_model_calls))
+        try:
+            async with asyncio.timeout(self.total_timeout_seconds):
+                return await self._turn(request)
+        except TimeoutError:
+            return self._error(request, "turn_timeout")
+        finally:
+            current_budget.reset(token)
+
+    async def _turn(self, request: TurnRequest) -> TurnResponse:
         try:
             guard = await self.fast.complete(GUARD, for_guard(request), GuardAssessment)
             if guard.decision == "uncertain":
@@ -143,8 +175,34 @@ class QwenTurnPipeline:
                     "Вернёмся к условиям нашего обсуждения. Какое предложение вы хотите обсудить?"
                 )
                 return self._candidate(request, text, "blocked", guard.reason, None)
-            error = "opponent_model_error"
-            offer = await self.fast.complete(OPPONENT, for_opponent(request), OpponentOffer)
+        except (ModelResponseError, ValueError):
+            return self._error(request, "guard_model_error")
+        prior_error = None
+        for _ in range(self.model_attempts):
+            result = await self._offer_attempt(request, prior_error)
+            if result.status != "model_error":
+                return result
+            prior_error = result.error_code
+            budget = current_budget.get()
+            if budget is not None and budget.remaining <= 0:
+                return result
+        return result
+
+    async def _offer_attempt(self, request: TurnRequest, prior_error: str | None) -> TurnResponse:
+        error = "opponent_model_error"
+        instruction = OPPONENT
+        if prior_error is not None:
+            instruction += (
+                "\n[V2_RETRY] Предыдущий кандидат не прошёл проверку на этапе "
+                + prior_error
+                + ". Создай новый кандидат из тех же исходных вводных. Он не был опубликован "
+                "и не изменил состояние. Не объявляй его принятой договорённостью. "
+                "Проверь соответствие текста полному typed terms; даже объявление текущих "
+                "условий требует terms. Не исправляй JSON задним числом и не угадывай условия. "
+                "Если отвечаешь без пакета, не называй значения предметов торга."
+            )
+        try:
+            offer = await self.fast.complete(instruction, for_opponent(request), OpponentOffer)
             error = "validation_failed"
             assessment = await self.validator.assess(request, offer)
             checked = check_offer(request, offer, assessment)

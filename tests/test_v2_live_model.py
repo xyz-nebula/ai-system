@@ -108,3 +108,49 @@ def test_live_unambiguous_references_do_not_excuse_mismatching_values():
 
     assessment = asyncio.run(run())
     assert assessment.decision in ("reject", "uncertain")
+
+
+@pytest.mark.skipif(
+    os.environ.get("ARENA_RUN_LIVE_V2") != "1", reason="Requires explicit live model opt-in"
+)
+def test_live_http_v2_negotiating_turn_uses_real_model_and_checked_snapshot(monkeypatch):
+    from arena_ai.app import create_configured_app
+
+    monkeypatch.setenv("ARENA_MODEL_MODE", "qwen")
+    monkeypatch.setenv("ARENA_V2_ENABLED", "true")
+    monkeypatch.setenv("ARENA_SERVICE_TOKEN", "synthetic-live-test-token")
+    base = TurnRequest.model_validate_json(
+        (
+            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+        ).read_bytes()
+    )
+    settings = QwenSettings.from_env()
+
+    async def run():
+        async with httpx.AsyncClient(
+            timeout=settings.timeout_seconds, verify=settings.tls_verify
+        ) as model_http:
+            app = create_configured_app(model_http)
+            async with (
+                app.router.lifespan_context(app),
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://test"
+                ) as client,
+            ):
+                return await client.post(
+                    "/v2/turn",
+                    content=base.model_dump_json(),
+                    headers={
+                        "Authorization": "Bearer synthetic-live-test-token",
+                        "X-Arena-Contract-Version": "2.0.0-rc.1",
+                    },
+                )
+
+    response = asyncio.run(run())
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "accepted", {
+        "status": result["status"],
+        "error_code": result["error_code"],
+    }
+    assert result["snapshot"]["revision"] == base.snapshot.revision + 1

@@ -1,5 +1,6 @@
 """HTTP adapter for text turns and duel completion."""
 
+import math
 import os
 import re
 from collections.abc import AsyncIterator
@@ -59,6 +60,8 @@ from arena_ai.privacy import (
     visible_proposal_text,
 )
 from arena_ai.trainer import DemoTrainer, Trainer, train_duel
+from arena_ai.v2.http import ArenaApp
+from arena_ai.v2.turn import QwenTurnPipeline
 
 SERVICE_BEARER = HTTPBearer(auto_error=False)
 VALIDATION_ERROR_CODES: dict[ValidatorRejectReason, ModelErrorCode] = {
@@ -551,9 +554,12 @@ def create_app(
     model_attempts: int = 1,
     judge_retrieval: JudgeRetrieval | None = None,
     owned_retrieval_http: httpx.AsyncClient | None = None,
+    v2_pipeline: QwenTurnPipeline | None = None,
 ) -> FastAPI:
     if not 1 <= model_attempts <= 3:
         raise ValueError("model_attempts must be between 1 and 3")
+    if v2_pipeline is not None and not service_token:
+        raise ValueError("V2 requires a configured service token")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -564,7 +570,7 @@ def create_app(
                 if owned is not None:
                     await owned.aclose()
 
-    app = FastAPI(title="Arena AI", version="0.1.0", lifespan=lifespan)
+    app = ArenaApp(title="Arena AI", version="0.1.0", lifespan=lifespan)
     active_opponent = opponent if opponent is not None else DemoOpponent()
     active_judge = judge if judge is not None else DemoJudge()
     active_trainer = trainer if trainer is not None else DemoTrainer()
@@ -588,6 +594,11 @@ def create_app(
                 detail="Unauthorized",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+    if v2_pipeline is not None:
+        from arena_ai.v2.http import install_turn_route
+
+        install_turn_route(app, v2_pipeline, require_service_token, SERVICE_BEARER)
 
     @app.get("/v1/info", response_model=ServiceInfo)
     async def service_info() -> ServiceInfo:
@@ -912,6 +923,17 @@ def create_configured_app(
 ) -> FastAPI:
     mode = os.environ.get("ARENA_MODEL_MODE", "demo")
     service_token = os.environ.get("ARENA_SERVICE_TOKEN") or None
+    from arena_ai.qwen import boolean_from_env, bounded_int_from_env, positive_float_from_env
+
+    v2_enabled = boolean_from_env("ARENA_V2_ENABLED", "false")
+    if v2_enabled and (mode != "qwen" or not service_token):
+        raise ValueError("V2 requires qwen mode and ARENA_SERVICE_TOKEN")
+    v2_timeout = (
+        positive_float_from_env("ARENA_V2_TURN_TIMEOUT_SECONDS", "60") if v2_enabled else 60
+    )
+    if not math.isfinite(v2_timeout):
+        raise ValueError("ARENA_V2_TURN_TIMEOUT_SECONDS must be finite")
+    v2_max_calls = bounded_int_from_env("ARENA_V2_MAX_MODEL_CALLS", "8", 1, 16) if v2_enabled else 8
     if mode == "demo":
         return create_app(service_token=service_token)
     if mode != "qwen":
@@ -919,7 +941,9 @@ def create_configured_app(
 
     from arena_ai.runtime import build_qwen_runtime
 
-    runtime = build_qwen_runtime(model_http, retrieval_http)
+    runtime = build_qwen_runtime(
+        model_http, retrieval_http, v2_timeout_seconds=v2_timeout, v2_max_model_calls=v2_max_calls
+    )
     return create_app(
         opponent=runtime.opponent,
         guard=runtime.guard,
@@ -934,6 +958,7 @@ def create_configured_app(
         model_attempts=runtime.model_attempts,
         judge_retrieval=runtime.retrieval,
         owned_retrieval_http=runtime.owned_retrieval_http,
+        v2_pipeline=runtime.v2_pipeline if v2_enabled else None,
     )
 
 

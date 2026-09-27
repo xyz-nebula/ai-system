@@ -250,3 +250,36 @@ unimplemented. Backend wire schema rc.1 and the deployed v1 were not changed.
 The previously unstable resource mismatch was additionally rejected in three
 sequential opt-in repeats (2.65s, 2.45s, 2.59s); model errors are not counted as
 successful rejections. These repeats improve confidence only for this control.
+
+## Opt-in HTTP turn and shared budget, 27 сентября
+
+Implemented `POST /v2/turn`, disabled by default; see [runtime configuration](runtime.md).
+Auth is the existing internal service bearer, not user JWT. Raw-body parsing and
+serialization preserve exact Decimal values. Runtime OpenAPI has the request
+schema, mandatory contract-version header and safe ServiceError responses.
+Closed rounds and version-header mismatches return 409 before model calls.
+
+The first real HTTP negotiating test returned model_error/validation_failed:
+Opponent announced current values but emitted terms=null. Tracing confirmed that
+the proposal was rejected, not silently repaired. A generic current-position
+clarification passed once, but failed in the following full repeat (4 passed,
+1 failed). Prompt clarification alone was **not** accepted as the stability fix.
+
+Added bounded fresh-candidate regeneration under `ARENA_MODEL_MAX_ATTEMPTS`:
+Guard is not repeated; every new candidate starts from the same original snapshot
+and passes all applicable gates. No failed proposal is published, no values are
+inferred/patched, and model assessments are not retried until accept. Candidates
+share one timeout and task-local call limit. Timeout cancels the local pending
+request and returns unchanged snapshot; remote computation may still continue.
+
+The unchanged HTTP live regression then passed in 33.59s; final full opt-in run:
+**5 passed in 80.91s**, including earlier partial/direct/repeat/mismatch checks.
+Ordinary suite: **629 passed / 14 skipped**. HTTP regression suite: **22 passed**,
+including cancellation across roles, call caps, concurrent budget isolation,
+malformed/rejected-candidate regeneration, auth/version/body/closed-round errors,
+exact Decimal preservation and default-off behavior. Ruff/format/ty, authored rc.1
+and enabled runtime OpenAPI validation passed. Temporary tracing was removed.
+
+This is not deployment or full project acceptance: finish/review/info v2, final
+outcome/Judges/Trainer and cross-team rollout remain incomplete. No server services
+or deployed v1 settings were changed.
