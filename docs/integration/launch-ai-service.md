@@ -4,6 +4,29 @@
 AI вызывается только Backend. Audio и Frontend напрямую к AI не подключаются.
 Для текущего экземпляра используйте [операционный гайд](staging-v2-checklist.md).
 
+## Короткий вариант: один Compose-файл
+
+Если LocalAI, Qdrant и заполненный индекс уже доступны, используйте
+[compose.simple.yaml](../../deploy/ai/compose.simple.yaml).
+Вся конфигурация AI находится в нём, отдельный `.env` и provision-скрипт не нужны.
+После клонирования репозитория, из его корня:
+
+```bash
+export ARENA_BIND_IP=172.16.34.7 # приватный IP своего сервера, порт 8000 свободен
+read -rsp 'Service token (тот же секрет передать Backend): ' ARENA_SERVICE_TOKEN
+export ARENA_SERVICE_TOKEN
+docker compose -f deploy/ai/compose.simple.yaml up -d --build
+docker compose -f deploy/ai/compose.simple.yaml ps
+curl --fail --max-time 10 "http://$ARENA_BIND_IP:8000/health/ready"
+```
+
+Вставьте заранее созданный длинный случайный секрет, не слово из примера.
+Для обновления/перезапуска в новой shell снова задайте те же две переменные.
+Если адреса зависимостей отличаются, исправьте их в Compose-файле.
+На текущем сервере порт 8000 занят — этот пример **не команда замены** текущего AI.
+Файл запускает только нашу часть: не переустанавливает чужой LocalAI и не создаёт
+пустую БД поверх существующей. Для новой установки RAG см. раздел 3 ниже.
+
 ## 1. Что нужно заранее
 
 - Docker Engine с Compose v2, Git и Python 3; право запускать Docker.

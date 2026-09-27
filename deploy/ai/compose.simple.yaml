@@ -1,0 +1,69 @@
+# Один файл запуска AI v2 на Linux. Выполнять из корня репозитория:
+# docker compose -f deploy/ai/compose.simple.yaml up -d --build
+# Перед запуском задайте ARENA_BIND_IP и ARENA_SERVICE_TOKEN, проверьте адреса.
+# LocalAI и заполненный RAG уже должны работать; этот файл их не изменяет.
+# На текущем сервере 8000 занят: не запускайте вторую копию на том же порту.
+name: arena-ai-simple
+
+services:
+  ai:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: arena-ai:team-local
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ARENA_V2_ENABLED: "true"
+      ARENA_MODEL_MODE: qwen
+      # Задайте случайный длинный секрет и передайте тот же секрет Backend.
+      # Редактируемая копия этого файла с секретом не должна попасть в Git.
+      ARENA_SERVICE_TOKEN: "${ARENA_SERVICE_TOKEN:?Set ARENA_SERVICE_TOKEN to a private random secret}"
+      ARENA_QWEN_CHAT_URL: http://172.16.34.6:8080/v1/chat/completions
+      ARENA_QWEN_MODEL: qwen3.8-9b-q4
+      ARENA_QWEN_JSON_MODE: prompt
+      ARENA_QWEN_TIMEOUT_SECONDS: "180"
+      ARENA_QWEN_READINESS_TIMEOUT_SECONDS: "5"
+      ARENA_QWEN_TLS_VERIFY: "true"
+      ARENA_QWEN_FAST_EXTRA_BODY: '{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
+      ARENA_QWEN_REASONED_EXTRA_BODY: '{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
+      ARENA_QWEN_JUDGE_EXTRA_BODY: '{"metadata":{"enable_thinking":"false"}}'
+      ARENA_MODEL_MAX_ATTEMPTS: "2"
+      ARENA_QDRANT_URL: http://127.0.0.1:6333
+      ARENA_EMBEDDINGS_URL: http://127.0.0.1:8081
+      ARENA_JUDGE_COLLECTION: arena_judge_methodology_v1
+      ARENA_RETRIEVAL_TIMEOUT_SECONDS: "30"
+    command:
+      - uvicorn
+      - arena_ai.app:app
+      - --host
+      - ${ARENA_BIND_IP:?Set ARENA_BIND_IP to this server's private IP}
+      - --port
+      - "8000"
+      - --no-access-log
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 2
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://${ARENA_BIND_IP:?Set ARENA_BIND_IP}:8000/health/live', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
