@@ -1,1 +1,43 @@
 .claude/
+
+# Python environments and generated artifacts
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Test and static-analysis caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ty_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Secrets and local runtime data; templates remain versioned
+.env
+.env.*
+!.env.example
+.envrc
+*.log
+*.sqlite3
+*.db
+
+# Editor and OS artifacts
+.idea/
+.vscode/
+.DS_Store
+
+# Local agent state and external reference checkouts
+/.scratch/
+/.secrets/
+/.agents/
+/.codex/
+/knowledge-base/
+/dev-context.md
+/docs/integration/team-messages.md
