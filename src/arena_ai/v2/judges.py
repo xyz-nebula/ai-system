@@ -6,7 +6,7 @@ import re
 from typing import Any, Literal
 
 from arena_ai.contracts import JudgeCollege, JudgeCriterion, JudgeMethodology
-from arena_ai.judge_corpus import CHUNKS, SOURCES
+from arena_ai.judge_corpus import CHUNKS, cites_source_title
 from arena_ai.judge_index import point_id
 from arena_ai.judge_retrieval import InvalidRetrievalError, JudgeRetrieval, methodology_for_college
 from arena_ai.judges import (
@@ -147,15 +147,8 @@ def check_verdict(verdict: JudgeVerdict, context: CollegeContext, request: Finis
         for token in (chunk.chunk_id, chunk.text_sha256, point_id(chunk))
     ):
         raise ValueError("Internal source identifier leaked")
-    for source in SOURCES.values():
-        title = re.sub(r"^\d+\.\s*", "", source.pdf_name.removesuffix(".pdf")).replace("_", " ")
-        if (
-            source.path.casefold() in lowered
-            or source.pdf_sha256 in lowered
-            or len(title.split()) > 1
-            and title.casefold() in lowered
-        ):
-            raise ValueError("Internal source reference leaked")
+    if cites_source_title(lowered):
+        raise ValueError("Internal source reference leaked")
     words = f" {' '.join(re.findall(r'\w+', visible.casefold()))} "
     for excerpt in [
         *context.methodology.core,

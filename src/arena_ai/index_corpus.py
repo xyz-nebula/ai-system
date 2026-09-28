@@ -3,26 +3,18 @@
 import argparse
 import os
 from collections.abc import Sequence
-from pathlib import Path
 
 import httpx
 
 from arena_ai.cli_args import positive_timeout
-from arena_ai.judge_corpus import CHUNKS, validate_corpus
+from arena_ai.judge_corpus import validate_corpus
 from arena_ai.judge_index import DEFAULT_COLLECTION, index_corpus, verify_index
 
 
 def main(argv: Sequence[str] | None = None, *, client: httpx.Client | None = None) -> None:
     parser = argparse.ArgumentParser(description="Индексация методологии судей в Qdrant")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--verify-only", action="store_true", help="только проверить корпус, без Qdrant"
-    )
-    mode.add_argument("--check-index", action="store_true", help="проверить уже заполненный индекс")
     parser.add_argument(
-        "--source-root",
-        type=Path,
-        help="папка с knowledge-base/methodology: сверить фрагменты с исходными страницами",
+        "--check-index", action="store_true", help="проверить уже заполненный индекс"
     )
     parser.add_argument(
         "--qdrant-url", default=os.getenv("ARENA_QDRANT_URL", "http://127.0.0.1:6333")
@@ -34,12 +26,7 @@ def main(argv: Sequence[str] | None = None, *, client: httpx.Client | None = Non
     parser.add_argument("--timeout", type=positive_timeout, default=180.0)
     args = parser.parse_args(argv)
 
-    # The excerpts live in code; the source documents are optional and not published.
-    validate_corpus(source_root=args.source_root)
-    if args.verify_only:
-        checked = "against source pages" if args.source_root else "metadata"
-        print(f"Verified {len(CHUNKS)} curated judge excerpts ({checked})")
-        return
+    validate_corpus()
     if client is None:
         with httpx.Client(timeout=args.timeout) as http:
             run(args, http)

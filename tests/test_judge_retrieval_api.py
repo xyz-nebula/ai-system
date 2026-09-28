@@ -106,7 +106,7 @@ class RetrievalGateway:
                 points.append(points[0])
             elif self.fault == "duplicate_page" and body.get("offset"):
                 points.append({"id": point_id(selected[0]), "payload": selected[0].payload()})
-            elif self.fault in ("text", "text_sha256", "corpus_version", "source_path"):
+            elif self.fault in ("text", "text_sha256", "corpus_version", "section"):
                 payload = points[0]["payload"]
                 assert isinstance(payload, dict)
                 payload[self.fault] = "unreviewed-private-material"
@@ -189,8 +189,7 @@ async def test_finish_retrieves_required_core_and_only_own_college_profile() -> 
         internal = context.model_dump_json()
         for key in (
             "chunk_id",
-            "source_path",
-            "source_name",
+            "source",
             "text_sha256",
             "page",
             "corpus_version",
@@ -200,9 +199,8 @@ async def test_finish_retrieves_required_core_and_only_own_college_profile() -> 
             assert chunk.chunk_id not in internal
             assert chunk.chunk_id not in response.text
             assert chunk.text not in response.text
-        for source in SOURCES.values():
-            assert source.path not in response.text
-            assert source.pdf_name not in response.text
+        for title in SOURCES.values():
+            assert title not in response.text
     assert "methodology" not in json.dumps(create_app().openapi())
 
 
@@ -226,7 +224,7 @@ async def test_finish_retrieves_required_core_and_only_own_college_profile() -> 
         "text",
         "text_sha256",
         "corpus_version",
-        "source_path",
+        "section",
         "extra_payload",
         "invalid_offset",
         "repeated_offset",
@@ -270,16 +268,15 @@ class LeakingJudge(RecordingJudge):
                     "id": CHUNKS[0].chunk_id,
                     "uuid": point_id(CHUNKS[0]),
                     "hash": CHUNKS[0].text_sha256,
-                    "path": SOURCES["guide"].path,
-                    "pdf_hash": SOURCES["guide"].pdf_sha256,
-                    "title": "Подготовка к переговорам",
+                    "title": SOURCES["preparation"],
+                    "guide": SOURCES["guide"],
                 }[self.leak]
         return raw
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "leak", ["excerpt", "id", "uuid", "hash", "path", "pdf_hash", "title", "method_quote"]
+    "leak", ["excerpt", "id", "uuid", "hash", "title", "guide", "method_quote"]
 )
 async def test_methodology_leaks_or_method_quote_as_evidence_never_become_public(leak: str) -> None:
     judge = LeakingJudge(leak)

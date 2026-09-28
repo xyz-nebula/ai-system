@@ -1,48 +1,33 @@
-"""Reviewed, source-verifiable methodology excerpts for the three judge colleges."""
+"""Reviewed methodology excerpts for the three judge colleges, quoted from unpublished manuals."""
 
 import hashlib
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from arena_ai.contracts import JudgeCollege
 
 CORPUS_ID = "arena-judge-methodology"
-CORPUS_VERSION = "2026-09-26.1"
+CORPUS_VERSION = "2026-09-29.1"
 ALL_COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
 type ChunkScope = Literal["core", "profile", "technique"]
 
 
-@dataclass(frozen=True, slots=True)
-class Source:
-    path: str
-    pdf_name: str
-    pdf_sha256: str
-
-
-SOURCES: dict[str, Source] = {
-    "guide": Source(
-        "knowledge-base/methodology/guide-sudeystvo-upravlencheskih-poedinkov.md",
-        "Гайд_по_судейству_управленческих_поединков_Юниверс.pdf",
-        "abbee159200e9fa401ba3ec80d89955f637738a019b419c350f82229bef30a51",
-    ),
-    "preparation": Source(
-        "knowledge-base/methodology/02-podgotovka-k-peregovoram.md",
-        "2. Подготовка к переговорам.pdf",
-        "cf184066aeb50df413d33c188dacbcb1e7d9b2d7da1bab2eb9f97786c369f9b9",
-    ),
-    "argumentation": Source(
-        "knowledge-base/methodology/04-argumentatsiya.md",
-        "4. Аргументация.pdf",
-        "e8bf5dd711151776a647d2211ba64559318ca1b0b2716dee6bcccc9cc0b8a90b",
-    ),
-    "social_roles": Source(
-        "knowledge-base/methodology/05-sotsialnye-roli.md",
-        "5. социальные роли.pdf",
-        "56d628b12a30ccc1e3bf8d2ca9e0c94cc27453aa567e3e84e0061a57110f3acb",
-    ),
+# Titles of the methodology manuals the excerpts are quoted from. The manuals are
+# not published; the titles only let the leak guard reject a named citation.
+SOURCES: dict[str, str] = {
+    "guide": "Гайд по судейству управленческих поединков",
+    "preparation": "Подготовка к переговорам",
+    "argumentation": "Аргументация",
+    "social_roles": "Социальные роли",
 }
+
+
+def cites_source_title(text: str) -> bool:
+    """True when text names a methodology manual (multi-word titles only)."""
+
+    lowered = text.casefold()
+    return any(len(title.split()) > 1 and title.casefold() in lowered for title in SOURCES.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +45,6 @@ class CorpusChunk:
         return hashlib.sha256(self.text.encode("utf-8")).hexdigest()
 
     def payload(self) -> dict[str, object]:
-        source = SOURCES[self.source]
         return {
             "corpus_id": CORPUS_ID,
             "corpus_version": CORPUS_VERSION,
@@ -68,9 +52,7 @@ class CorpusChunk:
             "chunk_id": self.chunk_id,
             "scope": self.scope,
             "colleges": list(self.colleges),
-            "source_path": source.path,
-            "source_name": source.pdf_name,
-            "source_pdf_sha256": source.pdf_sha256,
+            "source": self.source,
             "page": self.page,
             "section": self.section,
             "text": self.text,
@@ -270,8 +252,8 @@ def corpus_filter(college: JudgeCollege | None = None) -> dict[str, object]:
     return {"must": conditions}
 
 
-def validate_corpus(*, source_root: Path | None = None) -> None:
-    """Fail closed on invalid metadata; optionally verify exact source-page excerpts."""
+def validate_corpus() -> None:
+    """Fail closed on invalid corpus metadata."""
 
     ids: set[str] = set()
     for chunk in CHUNKS:
@@ -286,19 +268,6 @@ def validate_corpus(*, source_root: Path | None = None) -> None:
             raise ValueError(f"invalid college profile: {chunk.chunk_id}")
         if not chunk.colleges or any(college not in ALL_COLLEGES for college in chunk.colleges):
             raise ValueError(f"invalid college filter: {chunk.chunk_id}")
-        if source_root is not None:
-            source = SOURCES[chunk.source]
-            document = (source_root / source.path).read_text(encoding="utf-8")
-            header = f"**Источник:** `{source.pdf_name}`"
-            pdf_hash = f"**SHA-256 оригинального PDF:** `{source.pdf_sha256}`"
-            if header not in document or pdf_hash not in document:
-                raise ValueError(f"source metadata changed: {chunk.chunk_id}")
-            page = re.search(
-                rf"(?ms)^## Страница {chunk.page}\n\n```text\n(.*?)\n```",
-                document,
-            )
-            if page is None or chunk.text not in page.group(1):
-                raise ValueError(f"excerpt not on source page: {chunk.chunk_id}")
 
     for college in ALL_COLLEGES:
         selected = chunks_for_college(college)
