@@ -166,7 +166,9 @@ async def test_finish_retrieves_required_core_and_only_own_college_profile() -> 
     assert response.json()["outcome"]["kind"] == "no_agreement"
     assert response.json()["trainer_feedback"]["status"] == "ready"
     assert len(judge.contexts) == 3
-    assert len(gateway.requests) == 12  # Two mandatory pages, one embedding, one query per college.
+    # Per college: mandatory core+profile pages (fake page size 4), one embedding, one query.
+    pages = -(-len([c for c in chunks_for_college("hiring") if c.scope != "technique"]) // 4)
+    assert len(gateway.requests) == 3 * (pages + 2)
     retrieval_requests = json.dumps(gateway.requests, ensure_ascii=False)
     for marker in (
         "manager-only-marker",
@@ -246,7 +248,8 @@ async def test_retrieval_failure_skips_only_affected_judge_without_fallback(faul
     assert [context.college for context in judge.contexts] == ["negotiation", "ownership"]
     assert "retrieval-private-diagnostic" not in response.text
     assert "unreviewed-private-material" not in response.text
-    assert len(gateway.requests) < 25  # Invalid pagination is bounded, including empty pages.
+    # Invalid pagination is bounded by the corpus size, including endless empty pages.
+    assert len(gateway.requests) < len(CHUNKS) + 2 * 6 + 2
 
 
 class LeakingJudge(RecordingJudge):

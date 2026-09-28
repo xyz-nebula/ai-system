@@ -15,7 +15,7 @@ from arena_ai.judge_corpus import (
 def test_every_college_has_the_same_core_and_only_its_own_profile() -> None:
     validate_corpus()
     core_ids = {chunk.chunk_id for chunk in CHUNKS if chunk.scope == "core"}
-    assert len(core_ids) == 6
+    assert len(core_ids) == 9
     for college in ALL_COLLEGES:
         selected = chunks_for_college(college)
         assert {chunk.chunk_id for chunk in selected if chunk.scope == "core"} == core_ids
