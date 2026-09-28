@@ -1,5 +1,6 @@
 """Opt-in stateless turn route; Backend owns persistence and round commit."""
 
+import os
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
@@ -32,6 +33,10 @@ def install_turn_route(
     bearer: HTTPBearer,
     retrieval: JudgeRetrieval,
 ) -> None:
+    validation = os.environ.get("ARENA_EVALUATE_VALIDATION", "strict")
+    if validation not in ("strict", "soft"):
+        raise ValueError("ARENA_EVALUATE_VALIDATION must be strict or soft")
+
     def error(status: int, code: str, message: str) -> JSONResponse:
         return JSONResponse(
             status_code=status,
@@ -58,7 +63,13 @@ def install_turn_route(
             request = EvaluationRequest.model_validate_json(await raw.body())
         except ValueError:
             return error(422, "invalid_request", "Invalid evaluation request")
-        result = await evaluate_dialogue(request, pipeline.analysis, pipeline.judge, retrieval)
+        result = await evaluate_dialogue(
+            request,
+            pipeline.analysis,
+            pipeline.judge,
+            retrieval,
+            strict=validation == "strict",
+        )
         return Response(result.model_dump_json(), media_type="application/json")
 
     @app.post("/v2/preparation/review", operation_id="ai_post__v2_preparation_review")

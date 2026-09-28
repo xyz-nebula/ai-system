@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, ConfigDict, Field, create_model
@@ -372,6 +373,125 @@ def check_proof(
         raise ValueError("Ungrounded indexed evidence")
 
 
+# Characters a model rewrites when it quotes real UI text; the words must still match.
+EQUIVALENT_CHARACTERS = {
+    "ё": "[ёе]",
+    "е": "[ёе]",
+    "Ё": "[ЁЕ]",
+    "Е": "[ЁЕ]",
+    "—": "[—–-]",
+    "–": "[—–-]",
+    "-": "[—–-]",
+    "«": '[«»"“”„]',
+    "»": '[«»"“”„]',
+    '"': '[«»"“”„]',
+    "“": '[«»"“”„]',
+    "”": '[«»"“”„]',
+    "„": '[«»"“”„]',
+}
+
+
+def locate_quote(quote: str, text: str) -> str | None:
+    """Find a quote in its source despite whitespace and typography; return the exact span."""
+    if quote in text:
+        return quote
+    words = quote.split()
+    if not words:
+        return None
+    pattern = r"\s+".join(
+        "".join(EQUIVALENT_CHARACTERS.get(character, re.escape(character)) for character in word)
+        for word in words
+    )
+    match = re.search(pattern, text)
+    return match.group(0) if match else None
+
+
+def map_evidence[T: Contract](value: T, change: Callable[[IndexedEvidence], IndexedEvidence]) -> T:
+    def walk(item: object) -> object:
+        if isinstance(item, IndexedEvidence):
+            return change(item)
+        if isinstance(item, Contract):
+            return item.model_copy(
+                update={name: walk(getattr(item, name)) for name in type(item).model_fields}
+            )
+        if isinstance(item, list):
+            return [walk(element) for element in item]
+        return item
+
+    return walk(value)  # type: ignore[return-value]
+
+
+def ground_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
+    """Replace each locatable model quote with the exact transcript span it stands for.
+
+    Author, index and wording are still checked by check_proof afterwards; only
+    whitespace and typography the model normalised are restored from the source.
+    """
+
+    def ground(proof: IndexedEvidence) -> IndexedEvidence:
+        if proof.message_index >= len(dialogue.messages):
+            return proof
+        span = locate_quote(proof.quote, dialogue.messages[proof.message_index].text)
+        return proof if span is None else proof.model_copy(update={"quote": span})
+
+    return map_evidence(value, ground)
+
+
+def repair_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
+    """Soft mode: point every quote at a real transcript span instead of rejecting it.
+
+    The nearest message containing the quote wins; otherwise the start of the cited
+    (or last) message is used. Published quotes are always exact, correctly
+    attributed transcript text, never model wording.
+    """
+
+    def repair(proof: IndexedEvidence) -> IndexedEvidence:
+        messages = dialogue.messages
+        for entry in sorted(
+            messages, key=lambda entry: abs(entry.message_index - proof.message_index)
+        ):
+            span = locate_quote(proof.quote, entry.text)
+            if span is not None:
+                return IndexedEvidence(
+                    message_index=entry.message_index, is_ai=entry.is_ai, quote=span
+                )
+        entry = messages[min(proof.message_index, len(messages) - 1)]
+        return compact_proof(
+            IndexedEvidence(message_index=entry.message_index, is_ai=entry.is_ai, quote=entry.text)
+        )
+
+    return map_evidence(value, repair)
+
+
+def ground_preparation(
+    feedback: EvaluationTrainerFeedback, preparation: str | None
+) -> EvaluationTrainerFeedback:
+    """Restore exact plan fragments the same way as dialogue quotes."""
+    if preparation is None:
+        return feedback
+    plan = feedback.plan_vs_reality
+    if plan is not None:
+        plan = plan.model_copy(
+            update={
+                "items": [
+                    item.model_copy(
+                        update={
+                            "preparation_text": locate_quote(item.preparation_text, preparation)
+                            or item.preparation_text
+                        }
+                    )
+                    for item in plan.items
+                ]
+            }
+        )
+    goal = feedback.goal_assessment
+    if goal.goal_text is not None:
+        goal = goal.model_copy(
+            update={"goal_text": locate_quote(goal.goal_text, preparation) or goal.goal_text}
+        )
+    return feedback.model_copy(update={"plan_vs_reality": plan, "goal_assessment": goal})
+
+
 def check_sources(text: str) -> None:
     lowered = text.casefold()
     if SOURCE_REFERENCE.search(text) or any(
@@ -409,7 +529,9 @@ async def assess_outcome(dialogue: EvaluationDialogue, model: JsonChat) -> Evalu
     stage = "generate"
     try:
         async with asyncio.timeout(60):
-            candidate = await model.complete(OUTCOME, dialogue, EvaluationOutcome)
+            candidate = ground_evidence(
+                await model.complete(OUTCOME, dialogue, EvaluationOutcome), dialogue
+            )
             stage = "evidence"
             for proof in candidate.evidence:
                 check_proof(proof, dialogue)
@@ -487,6 +609,17 @@ def compact_proof(proof: IndexedEvidence, *, max_words: int = 10) -> IndexedEvid
     return proof.model_copy(update={"quote": proof.quote[: words[max_words - 1].end()]})
 
 
+def judge_response_type(college: JudgeCollege) -> type[EvidenceFirstVerdict]:
+    return create_model(
+        f"{college.title()}EvidenceFirstVerdict",
+        __base__=EvidenceFirstVerdict,
+        decisive_criterion=(
+            JudgeCriterion,
+            Field(json_schema_extra={"enum": list(CRITERIA[college])}),
+        ),
+    )
+
+
 async def assess_judge(
     college: JudgeCollege,
     dialogue: EvaluationDialogue,
@@ -507,14 +640,7 @@ async def assess_judge(
                 methodology=methodology,
                 dialogue=dialogue,
             )
-            response_type = create_model(
-                f"{college.title()}EvidenceFirstVerdict",
-                __base__=EvidenceFirstVerdict,
-                decisive_criterion=(
-                    JudgeCriterion,
-                    Field(json_schema_extra={"enum": list(CRITERIA[college])}),
-                ),
-            )
+            response_type = judge_response_type(college)
             # One more draft after an invalid one; every check applies again, and the
             # shared timeout keeps the slot's worst-case duration unchanged.
             revision: list[str] | None = None
@@ -531,6 +657,7 @@ async def assess_judge(
                         ),
                         response_type,
                     )
+                    draft = ground_evidence(draft, dialogue)
                     stage = "evidence"
                     check_proof(draft.evidence, dialogue)
                     effect_evidence = draft.effect_evidence
@@ -748,7 +875,12 @@ async def assess_trainer(
                 stage = "generate"
                 try:
                     draft = await model.complete(system, context, EvaluationTrainerDraft)
-                    feedback = EvaluationTrainerFeedback.model_validate(draft.model_dump())
+                    feedback = ground_preparation(
+                        ground_evidence(
+                            EvaluationTrainerFeedback.model_validate(draft.model_dump()), context
+                        ),
+                        context.preparation,
+                    )
                     stage = "feedback_validation"
                     check_trainer(feedback, context)
                     stage = "verify"
@@ -775,8 +907,164 @@ async def assess_trainer(
     return EvaluationTrainerSlot(status="failed", feedback=None, error_code=code)
 
 
+# Soft validation (ARENA_EVALUATE_VALIDATION=soft) trades the model-based checks for
+# availability: no checker calls, quotes are repaired to real transcript spans and
+# content rules are not enforced. Only unparseable output, outages and timeouts fail.
+
+
+async def draft_twice[T: Contract](
+    slot: str, model: JsonChat, system: str, context: Contract, response_type: type[T]
+) -> T:
+    try:
+        return await model.complete(system, context, response_type)
+    except ModelOutputError as error:
+        log_evaluation_failure(slot, "generate", error)
+        return await model.complete(system, context, response_type)
+
+
+async def soft_outcome(dialogue: EvaluationDialogue, model: JsonChat) -> EvaluationOutcomeSlot:
+    code: Literal["outcome_analysis_unavailable", "invalid_outcome_analysis"] = (
+        "outcome_analysis_unavailable"
+    )
+    try:
+        async with asyncio.timeout(60):
+            candidate = await draft_twice("outcome", model, OUTCOME, dialogue, EvaluationOutcome)
+            return EvaluationOutcomeSlot(
+                status="ready", assessment=repair_evidence(candidate, dialogue), error_code=None
+            )
+    except (ValueError, ModelOutputError) as error:
+        log_evaluation_failure("outcome", "generate", error)
+        code = "invalid_outcome_analysis"
+    except (ModelResponseError, TimeoutError) as error:
+        log_evaluation_failure("outcome", "generate", error)
+    return EvaluationOutcomeSlot(status="failed", assessment=None, error_code=code)
+
+
+def soft_verdict(
+    college: JudgeCollege, draft: EvidenceFirstVerdict, dialogue: EvaluationDialogue
+) -> EvaluationJudgeVerdict:
+    def role(proof: IndexedEvidence) -> str:
+        return dialogue.opponent_role if proof.is_ai else dialogue.player_role
+
+    episode = draft.evidence
+    reaction = draft.effect_evidence
+    if (
+        reaction is None
+        or reaction.message_index <= episode.message_index
+        or reaction.is_ai == episode.is_ai
+    ):
+        reaction = next(
+            (
+                IndexedEvidence(
+                    message_index=entry.message_index, is_ai=entry.is_ai, quote=entry.text
+                )
+                for entry in dialogue.messages[episode.message_index + 1 :]
+                if entry.is_ai != episode.is_ai
+            ),
+            None,
+        )
+    if reaction is not None:
+        effect = f"Далее {role(reaction)} сказал: «{compact_proof(reaction).quote}»."
+    elif episode.message_index == len(dialogue.messages) - 1:
+        effect = "Ответа на эту реплику в диалоге нет: она последняя."
+    else:
+        effect = "После этой реплики в диалоге высказывалась только та же роль."
+    preferred = dialogue.player_role if draft.choice == "player" else dialogue.opponent_role
+    parts = [f"Мой выбор по критерию «{draft.decisive_criterion}» — роль «{preferred}»."]
+    compared = [
+        proof for proof in (draft.player_evidence, draft.opponent_evidence) if proof is not None
+    ] or draft.comparison_evidence
+    if compared:
+        quotes = "; ".join(f"{role(proof)}: «{compact_proof(proof).quote}»" for proof in compared)
+        parts.append(f"Сравнение реплик: {quotes}.")
+    reason = draft.criterion_reason or draft.comparison
+    if reason:
+        parts.append(reason)
+    return EvaluationJudgeVerdict(
+        college=college,
+        choice=draft.choice,
+        decisive_criterion=draft.decisive_criterion,
+        evidence=compact_proof(episode),
+        observation=f"{role(episode)} сказал: «{compact_proof(episode).quote}».",
+        effect=effect,
+        comparison=" ".join(parts),
+    )
+
+
+async def soft_judge(
+    college: JudgeCollege,
+    dialogue: EvaluationDialogue,
+    model: JsonChat,
+    retrieval: JudgeRetrieval,
+) -> EvaluationJudgeSlot:
+    code = "judge_retrieval_unavailable"
+    stage = "retrieval"
+    try:
+        async with asyncio.timeout(60):
+            methodology = methodology_for_college(await retrieval.retrieve(college), college)
+            code = "judge_unavailable"
+            stage = "generate"
+            context = EvaluationCollegeContext(
+                college=college,
+                rubric=RUBRICS[college],
+                methodology=methodology,
+                dialogue=dialogue,
+            )
+            draft = await draft_twice(
+                college, model, EVALUATION_JUDGE, context, judge_response_type(college)
+            )
+            verdict = soft_verdict(college, repair_evidence(draft, dialogue), dialogue)
+            return EvaluationJudgeSlot(
+                college=college, status="ready", verdict=verdict, error_code=None
+            )
+    except InvalidRetrievalError as error:
+        log_evaluation_failure(college, stage, error)
+        code = "invalid_judge_retrieval"
+    except (ValueError, ModelOutputError) as error:
+        log_evaluation_failure(college, stage, error)
+        code = "invalid_judge_output"
+    except Exception as error:  # noqa: BLE001 - isolate external failures per college
+        log_evaluation_failure(college, stage, error)
+    return EvaluationJudgeSlot.model_validate(
+        {"college": college, "status": "failed", "verdict": None, "error_code": code}
+    )
+
+
+async def soft_trainer(context: EvaluationTrainerContext, model: JsonChat) -> EvaluationTrainerSlot:
+    if not any(not entry.is_ai for entry in context.messages):
+        return EvaluationTrainerSlot(
+            status="failed", feedback=None, error_code="insufficient_evidence"
+        )
+    code: Literal["trainer_unavailable", "invalid_trainer_output"] = "trainer_unavailable"
+    try:
+        async with asyncio.timeout(90):
+            draft = await draft_twice(
+                "trainer", model, EVALUATION_TRAINER, context, EvaluationTrainerDraft
+            )
+            feedback = ground_preparation(
+                repair_evidence(
+                    EvaluationTrainerFeedback.model_validate(draft.model_dump()), context
+                ),
+                context.preparation,
+            )
+            if context.preparation is None:
+                feedback = feedback.model_copy(update={"plan_vs_reality": None})
+            return EvaluationTrainerSlot(status="ready", feedback=feedback, error_code=None)
+    except (ValueError, ModelOutputError) as error:
+        log_evaluation_failure("trainer", "generate", error)
+        code = "invalid_trainer_output"
+    except (ModelResponseError, TimeoutError) as error:
+        log_evaluation_failure("trainer", "generate", error)
+    return EvaluationTrainerSlot(status="failed", feedback=None, error_code=code)
+
+
 async def evaluate_dialogue(
-    request: EvaluationRequest, model: JsonChat, judge: JsonChat, retrieval: JudgeRetrieval
+    request: EvaluationRequest,
+    model: JsonChat,
+    judge: JsonChat,
+    retrieval: JudgeRetrieval,
+    *,
+    strict: bool = True,
 ) -> EvaluationResponse:
     dialogue = EvaluationDialogue(
         player_role=request.role,
@@ -787,7 +1075,7 @@ async def evaluate_dialogue(
             for index, entry in enumerate(request.messages)
         ],
     )
-    outcome = await assess_outcome(dialogue, model)
+    outcome = await (assess_outcome if strict else soft_outcome)(dialogue, model)
     verdicts = []
     for college in COLLEGES:
         if {entry.is_ai for entry in dialogue.messages} != {True, False}:
@@ -800,8 +1088,12 @@ async def evaluate_dialogue(
                 )
             )
         else:
-            verdicts.append(await assess_judge(college, dialogue, judge, model, retrieval))
-    trainer = await assess_trainer(
+            verdicts.append(
+                await assess_judge(college, dialogue, judge, model, retrieval)
+                if strict
+                else await soft_judge(college, dialogue, judge, retrieval)
+            )
+    trainer = await (assess_trainer if strict else soft_trainer)(
         EvaluationTrainerContext(**dialogue.model_dump(), preparation=request.preparations), model
     )
     return EvaluationResponse(outcome=outcome, judge_verdicts=verdicts, trainer_feedback=trainer)

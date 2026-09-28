@@ -29,6 +29,8 @@ services:
       ARENA_QWEN_FAST_EXTRA_BODY: '{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
       ARENA_QWEN_REASONED_EXTRA_BODY: '{"chat_template_kwargs":{"enable_thinking":false},"temperature":0}'
       ARENA_QWEN_JUDGE_EXTRA_BODY: '{"metadata":{"enable_thinking":"false"}}'
+      # soft: /v2/evaluate без модельных проверок, цитаты чинятся по транскрипту; strict: все проверки.
+      ARENA_EVALUATE_VALIDATION: soft
       ARENA_MODEL_MAX_ATTEMPTS: "2"
       ARENA_QDRANT_URL: http://127.0.0.1:6333
       ARENA_EMBEDDINGS_URL: http://127.0.0.1:8081

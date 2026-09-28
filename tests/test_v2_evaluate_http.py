@@ -360,6 +360,147 @@ async def test_live_grounding_accepts_supported_action_comparison():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("quoted", ["normalized", "changed_words"])
+async def test_quotes_of_real_ui_text_are_matched_across_whitespace_and_published_exactly(
+    monkeypatch, quoted
+):
+    # Live qwen collapses the double spaces and line breaks of real UI messages.
+    player = "Предлагаю  цену 100 рублей\nи поставку в пятницу — «срочно»."
+    opponent = "Согласен   на 100 рублей и поставку в пятницу."
+    body = evaluate_body()
+    body["messages"] = [{"text": player, "is_ai": False}, {"text": opponent, "is_ai": True}]
+    player_quote = (
+        'Предлагаю цену 100 рублей и поставку в пятницу - "срочно".'
+        if quoted == "normalized"
+        else "Предлагаю цену 200 рублей и поставку в пятницу."
+    )
+    proofs = [
+        {"message_index": 0, "is_ai": False, "quote": player_quote},
+        {
+            "message_index": 1,
+            "is_ai": True,
+            "quote": "Согласен на 100 рублей и поставку в пятницу.",
+        },
+    ]
+
+    def gateway(req):
+        messages = json.loads(req.content)["messages"]
+        system = messages[0]["content"]
+        context = json.loads(messages[1]["content"])
+        if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            return reply_json(verifier_reply(system))
+        if "[V2_EVALUATE_OUTCOME]" in system:
+            return reply_json({**outcome_example(), "evidence": proofs})
+        if "[V2_EVALUATE_JUDGE]" in system:
+            return reply_json(
+                {
+                    **judge_example(context["college"]),
+                    "evidence": proofs[0],
+                    "comparison_evidence": proofs,
+                }
+            )
+        if "[V2_EVALUATE_TRAINER]" in system:
+            feedback = trainer_example()
+            feedback["strengths"][0]["evidence"] = proofs[0]
+            feedback["plan_vs_reality"]["items"][0]["evidence"] = proofs[0]
+            feedback["goal_assessment"]["evidence"] = proofs
+            return reply_json(feedback)
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway, body=body)).json()
+    validate_contract("EvaluationResponse", result)
+    slots = [result["outcome"], *result["judge_verdicts"], result["trainer_feedback"]]
+    if quoted == "changed_words":
+        assert all(slot["status"] == "failed" for slot in slots)
+        return
+    assert all(slot["status"] == "ready" for slot in slots), slots
+    published = [
+        *result["outcome"]["assessment"]["evidence"],
+        *(slot["verdict"]["evidence"] for slot in result["judge_verdicts"]),
+        result["trainer_feedback"]["feedback"]["strengths"][0]["evidence"],
+        *result["trainer_feedback"]["feedback"]["goal_assessment"]["evidence"],
+    ]
+    for proof in published:
+        # Published quotes stay exact substrings of the stored transcript.
+        assert proof["quote"] in body["messages"][proof["message_index"]]["text"], proof
+    assert published[0]["quote"] == player
+
+
+@pytest.mark.anyio
+async def test_soft_validation_repairs_quotes_to_real_text_without_checker_calls(monkeypatch):
+    monkeypatch.setenv("ARENA_EVALUATE_VALIDATION", "soft")
+    body = evaluate_body()
+    body["messages"] = [
+        {"text": "Предлагаю  цену 100 рублей\nи поставку в пятницу.", "is_ai": False},
+        {"text": "Согласен на 100 рублей и поставку в пятницу.", "is_ai": True},
+    ]
+    misplaced = {
+        "message_index": 1,
+        "is_ai": True,
+        "quote": "Предлагаю цену 100 рублей и поставку в пятницу.",
+    }
+    invented = {"message_index": 7, "is_ai": False, "quote": "Товар уже доставлен."}
+
+    def gateway(req):
+        messages = json.loads(req.content)["messages"]
+        system = messages[0]["content"]
+        context = json.loads(messages[1]["content"])
+        if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            raise AssertionError("Soft validation must not call model checkers")
+        if "[V2_EVALUATE_OUTCOME]" in system:
+            return reply_json({**outcome_example(), "evidence": [misplaced, invented]})
+        if "[V2_EVALUATE_JUDGE]" in system:
+            return reply_json(
+                {
+                    **judge_example(context["college"]),
+                    "evidence": invented,
+                    "comparison_evidence": [misplaced, misplaced],
+                    "criterion_reason": "Покупатель назвал условия.",
+                }
+            )
+        if "[V2_EVALUATE_TRAINER]" in system:
+            feedback = trainer_example()
+            feedback["strengths"][0]["evidence"] = invented
+            feedback["goal_assessment"]["evidence"] = [misplaced]
+            return reply_json(feedback)
+        return httpx.Response(503)
+
+    response = await send_evaluation(monkeypatch, gateway, body=body)
+    result = response.json()
+    validate_contract("EvaluationResponse", result)
+    slots = [result["outcome"], *result["judge_verdicts"], result["trainer_feedback"]]
+    assert all(slot["status"] == "ready" for slot in slots), slots
+    feedback = result["trainer_feedback"]["feedback"]
+    published = [
+        *result["outcome"]["assessment"]["evidence"],
+        *(slot["verdict"]["evidence"] for slot in result["judge_verdicts"]),
+        *(point["evidence"] for point in feedback["strengths"]),
+        *feedback["goal_assessment"]["evidence"],
+    ]
+    for proof in published:
+        source = body["messages"][proof["message_index"]]
+        assert proof["is_ai"] == source["is_ai"] and proof["quote"] in source["text"], proof
+    assert result["outcome"]["assessment"]["evidence"][0] == {
+        "message_index": 0,
+        "is_ai": False,
+        "quote": body["messages"][0]["text"],
+    }
+    assert "Товар уже доставлен" not in response.text
+
+
+@pytest.mark.anyio
+async def test_unknown_validation_mode_is_rejected_at_startup(monkeypatch):
+    configure(monkeypatch)
+    monkeypatch.setenv("ARENA_EVALUATE_VALIDATION", "off")
+    async with (
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(503))) as model,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(503))) as rag,
+    ):
+        with pytest.raises(ValueError, match="ARENA_EVALUATE_VALIDATION"):
+            create_configured_app(model, rag)
+
+
+@pytest.mark.anyio
 async def test_rejected_judge_draft_gets_one_fully_checked_redraft_with_feedback(monkeypatch):
     rejected = "Покупатель предложил условия, что демонстрирует управление рисками."
     revised = "Покупатель предложил цену и срок, а Поставщик согласился на них."
