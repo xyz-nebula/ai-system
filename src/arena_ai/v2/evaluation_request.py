@@ -27,8 +27,12 @@ class EvaluationRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    role: NonBlankText = Field(description="User's active game role.")
-    opponent_role: NonBlankText = Field(description="AI opponent's active game role.")
+    role: NonBlankText = Field(
+        description="AI model's active game role (Backend's system_role); is_ai=true messages."
+    )
+    opponent_role: NonBlankText = Field(
+        description="User's active game role; is_ai=false messages."
+    )
     case_description: NonBlankText = Field(
         description="Shared case context and conditions, without hidden opponent information."
     )

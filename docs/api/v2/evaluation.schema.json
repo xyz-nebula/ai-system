@@ -578,14 +578,14 @@
       "description": "Finished dialogue for judges and the post-dialogue trainer.",
       "properties": {
         "role": {
-          "description": "User's active game role.",
+          "description": "AI model's active game role (Backend's system_role); is_ai=true messages.",
           "minLength": 1,
           "pattern": "\\S",
           "title": "Role",
           "type": "string"
         },
         "opponent_role": {
-          "description": "AI opponent's active game role.",
+          "description": "User's active game role; is_ai=false messages.",
           "minLength": 1,
           "pattern": "\\S",
           "title": "Opponent Role",

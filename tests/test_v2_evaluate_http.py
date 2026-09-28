@@ -39,9 +39,10 @@ def validate_contract(kind, value):
 
 
 def evaluate_body():
+    # `role` is the model's role (Backend selects it as system_role); the user is opponent_role.
     return {
-        "role": "Покупатель",
-        "opponent_role": "Поставщик",
+        "role": "Поставщик",
+        "opponent_role": "Покупатель",
         "case_description": "Обсуждение цены и срока поставки.",
         "messages": [
             {"text": "Предлагаю цену 100 рублей и поставку в пятницу.", "is_ai": False},
@@ -427,6 +428,42 @@ async def test_quotes_of_real_ui_text_are_matched_across_whitespace_and_publishe
 
 
 @pytest.mark.anyio
+async def test_role_is_the_model_role_and_the_user_plays_opponent_role(monkeypatch):
+    trainer_contexts = []
+
+    def gateway(req):
+        messages = json.loads(req.content)["messages"]
+        system = messages[0]["content"]
+        context = json.loads(messages[1]["content"])
+        if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            return reply_json(verifier_reply(system))
+        if "[V2_EVALUATE_OUTCOME]" in system:
+            return reply_json(outcome_example())
+        if "[V2_EVALUATE_JUDGE]" in system:
+            return reply_json(
+                {
+                    **judge_example(context["college"]),
+                    "comparison_evidence": outcome_example()["evidence"],
+                }
+            )
+        if "[V2_EVALUATE_TRAINER]" in system:
+            trainer_contexts.append(context)
+            return reply_json(trainer_example())
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway)).json()
+    assert (trainer_contexts[0]["player_role"], trainer_contexts[0]["opponent_role"]) == (
+        "Покупатель",
+        "Поставщик",
+    )
+    for slot in result["judge_verdicts"]:
+        assert slot["status"] == "ready", slot
+        # The user's own message (is_ai=false) is labelled with the user's role.
+        assert slot["verdict"]["observation"].startswith("Покупатель сказал:"), slot
+        assert "роль «Покупатель»" in slot["verdict"]["comparison"]
+
+
+@pytest.mark.anyio
 async def test_soft_validation_repairs_quotes_to_real_text_without_checker_calls(monkeypatch):
     monkeypatch.setenv("ARENA_EVALUATE_VALIDATION", "soft")
     body = evaluate_body()
@@ -460,8 +497,17 @@ async def test_soft_validation_repairs_quotes_to_real_text_without_checker_calls
             )
         if "[V2_EVALUATE_TRAINER]" in system:
             feedback = trainer_example()
-            feedback["strengths"][0]["evidence"] = invented
-            feedback["goal_assessment"]["evidence"] = [misplaced]
+            feedback["strengths"] = [
+                {**feedback["strengths"][0], "evidence": misplaced},
+                {**feedback["strengths"][0], "evidence": invented},
+                {
+                    **feedback["strengths"][0],
+                    "evidence": {"message_index": 1, "is_ai": True, "quote": "Согласен"},
+                },
+            ]
+            feedback["goal_assessment"].update(
+                goal_text=None, status="not_achieved", evidence=[misplaced]
+            )
             return reply_json(feedback)
         return httpx.Response(503)
 
@@ -486,6 +532,9 @@ async def test_soft_validation_repairs_quotes_to_real_text_without_checker_calls
         "quote": body["messages"][0]["text"],
     }
     assert "Товар уже доставлен" not in response.text
+    # AI messages are not the user's actions; no written goal means not_assessable.
+    assert [point["evidence"]["is_ai"] for point in feedback["strengths"]] == [False]
+    assert feedback["goal_assessment"]["status"] == "not_assessable"
 
 
 @pytest.mark.anyio
@@ -1466,8 +1515,8 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
     body = evaluate_body()
     if scope == "substantive":
         body = {
-            "role": "Менеджер",
-            "opponent_role": "Генеральный директор",
+            "role": "Генеральный директор",
+            "opponent_role": "Менеджер",
             "case_description": "Переговоры о повышении после пропущенного рабочего дня.",
             "messages": [
                 {
@@ -1774,8 +1823,8 @@ async def test_live_evaluate_hiring_returns_a_grounded_verdict(monkeypatch, cand
         "unsupported_deadline_risk",
     ):
         body.update(
-            role="Студент",
-            opponent_role="Преподаватель",
+            role="Преподаватель",
+            opponent_role="Студент",
             case_description="Обсуждение переноса срока сдачи учебной работы.",
             preparations=None,
             messages=[

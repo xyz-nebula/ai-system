@@ -52,8 +52,8 @@ Content-Type: application/json
 
 ```json
 {
-  "role": "Поставщик",
-  "opponent_role": "Заказчик",
+  "role": "Заказчик",
+  "opponent_role": "Поставщик",
   "case_description": "Стороны согласуют срок поставки и подтверждение заказа.",
   "messages": [
     {"text": "Предлагаю доставку в пятницу при подтверждении заказа сегодня.", "is_ai": false},
@@ -65,8 +65,8 @@ Content-Type: application/json
 
 | Поле | Тип и источник |
 | --- | --- |
-| role | Непустая строка: Case.first_role при Chat.selected_role=0, иначе Case.second_role |
-| opponent_role | Непустая строка: другая из двух ролей |
+| role | Роль **модели** (AI, реплики is_ai=true): та, что ChatService выбирает как system_role |
+| opponent_role | Роль **пользователя** (реплики is_ai=false): другая из двух ролей |
 | case_description | Непустая общая фабула Case.description; без system_prompt/закрытых вводных |
 | messages | Непустой список сохранённых реплик по Message.sequence |
 | messages[].text | Непустой Message.text, не системный промпт/ошибка |
@@ -82,7 +82,7 @@ Content-Type: application/json
 
 Backend получает имя из проверенной записи аккаунта (например, User.firstname),
 а не из произвольного текста Frontend. Имя можно использовать для отображения результата.
-Это **не игровая роль**: role остаётся «Менеджер»/«Поставщик» и т. п., а is_ai
+Это **не игровая роль**: role/opponent_role остаются «Менеджер»/«Поставщик» и т. п., а is_ai
 определяет авторство независимо от имени. Не добавлять имя в текст реплик задним числом.
 
 В действующем EvaluationRequest нет user_name/display_name, неизвестное поле вызовет

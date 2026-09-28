@@ -102,8 +102,8 @@ Content-Type: application/json
 
 | Поле AI | Тип / содержание | Источник Backend |
 | --- | --- | --- |
-| role | Непустая строка, роль пользователя | first_role при selected_role=0, second_role при 1 |
-| opponent_role | Непустая строка, роль AI | Противоположная роль Case |
+| role | Непустая строка, роль модели (AI, is_ai=true) | Роль, выбранная Backend как system_role |
+| opponent_role | Непустая строка, роль пользователя (is_ai=false) | Противоположная роль Case |
 | case_description | Общая фабула, без скрытой подготовки/промпта | Case.description, полноту проверяет автор |
 | messages | Непустой список в сохранённом порядке | Message по sequence |
 | messages[].text | Непустая реплика | Message.text |

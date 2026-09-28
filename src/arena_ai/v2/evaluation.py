@@ -1030,6 +1030,35 @@ async def soft_judge(
     )
 
 
+def soften_trainer(
+    feedback: EvaluationTrainerFeedback, context: EvaluationTrainerContext
+) -> EvaluationTrainerFeedback:
+    """Repair, not reject, the contract rules the soft mode can fix deterministically."""
+
+    def user_points(points: list[EvaluationCoachingPoint]) -> list[EvaluationCoachingPoint]:
+        # An AI message is not the user's action; drop such praise or criticism.
+        return [point for point in points if not point.evidence.is_ai]
+
+    plan = feedback.plan_vs_reality
+    if context.preparation is None:
+        plan = None
+    elif plan is not None:
+        items = [item for item in plan.items if item.evidence is None or not item.evidence.is_ai]
+        plan = plan.model_copy(update={"items": items}) if items else None
+    goal = feedback.goal_assessment
+    if goal.goal_text is None and goal.status != "not_assessable":
+        # Without a written personal goal the contract allows only not_assessable.
+        goal = goal.model_copy(update={"status": "not_assessable"})
+    return feedback.model_copy(
+        update={
+            "strengths": user_points(feedback.strengths),
+            "mistakes": user_points(feedback.mistakes),
+            "plan_vs_reality": plan,
+            "goal_assessment": goal,
+        }
+    )
+
+
 async def soft_trainer(context: EvaluationTrainerContext, model: JsonChat) -> EvaluationTrainerSlot:
     if not any(not entry.is_ai for entry in context.messages):
         return EvaluationTrainerSlot(
@@ -1047,9 +1076,9 @@ async def soft_trainer(context: EvaluationTrainerContext, model: JsonChat) -> Ev
                 ),
                 context.preparation,
             )
-            if context.preparation is None:
-                feedback = feedback.model_copy(update={"plan_vs_reality": None})
-            return EvaluationTrainerSlot(status="ready", feedback=feedback, error_code=None)
+            return EvaluationTrainerSlot(
+                status="ready", feedback=soften_trainer(feedback, context), error_code=None
+            )
     except (ValueError, ModelOutputError) as error:
         log_evaluation_failure("trainer", "generate", error)
         code = "invalid_trainer_output"
@@ -1066,9 +1095,11 @@ async def evaluate_dialogue(
     *,
     strict: bool = True,
 ) -> EvaluationResponse:
+    # Backend sends the model's role as `role` (ChatService selects it as system_role);
+    # the user, whose messages have is_ai=false, plays opponent_role.
     dialogue = EvaluationDialogue(
-        player_role=request.role,
-        opponent_role=request.opponent_role,
+        player_role=request.opponent_role,
+        opponent_role=request.role,
         shared_context=request.case_description,
         messages=[
             IndexedMessage(message_index=index, text=entry.text, is_ai=entry.is_ai)
