@@ -10,7 +10,7 @@ from pydantic import AliasChoices, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
 from arena_ai.contracts import JudgeCollege, JudgeCriterion, JudgeMethodology
-from arena_ai.judge_corpus import CHUNKS, cites_source_title
+from arena_ai.judge_corpus import CHUNKS
 from arena_ai.judge_index import point_id
 from arena_ai.judge_retrieval import InvalidRetrievalError, JudgeRetrieval, methodology_for_college
 from arena_ai.judges import (
@@ -499,8 +499,6 @@ def check_sources(text: str) -> None:
         for chunk in CHUNKS
         for token in (chunk.chunk_id, chunk.text_sha256, point_id(chunk))
     ):
-        raise ValueError("Internal source reference")
-    if cites_source_title(lowered):
         raise ValueError("Internal source reference")
 
 

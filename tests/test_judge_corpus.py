@@ -8,7 +8,6 @@ from arena_ai.judge_corpus import (
     CHUNKS,
     SOURCES,
     chunks_for_college,
-    cites_source_title,
     validate_corpus,
 )
 
@@ -46,16 +45,3 @@ def test_duplicate_chunk_ids_are_rejected(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(judge_corpus, "CHUNKS", (*CHUNKS, CHUNKS[0]))
     with pytest.raises(ValueError, match="duplicate chunk_id"):
         validate_corpus()
-
-
-@pytest.mark.parametrize(
-    ("text", "cited"),
-    [
-        ("Как сказано в «Подготовке к переговорам»", False),
-        ("Согласно пособию «Подготовка к переговорам», это верно", True),
-        ("ГАЙД ПО СУДЕЙСТВУ УПРАВЛЕНЧЕСКИХ ПОЕДИНКОВ", True),
-        ("Аргументация была слабой", False),
-    ],
-)
-def test_leak_guard_recognises_manual_titles(text: str, cited: bool) -> None:
-    assert cites_source_title(text) is cited

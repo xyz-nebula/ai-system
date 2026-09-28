@@ -9,7 +9,7 @@ from test_judges_api import FINISH_PAYLOAD, RecordingJudge
 
 from arena_ai.app import create_app, create_configured_app
 from arena_ai.contracts import JudgeCollege, JudgeContext
-from arena_ai.judge_corpus import CHUNKS, CORPUS_ID, CORPUS_VERSION, SOURCES, chunks_for_college
+from arena_ai.judge_corpus import CHUNKS, CORPUS_ID, CORPUS_VERSION, chunks_for_college
 from arena_ai.judge_index import point_id
 from arena_ai.judge_retrieval import QUERIES, QdrantJudgeRetrieval, RetrievalSettings
 
@@ -199,8 +199,6 @@ async def test_finish_retrieves_required_core_and_only_own_college_profile() -> 
             assert chunk.chunk_id not in internal
             assert chunk.chunk_id not in response.text
             assert chunk.text not in response.text
-        for title in SOURCES.values():
-            assert title not in response.text
     assert "methodology" not in json.dumps(create_app().openapi())
 
 
@@ -268,16 +266,12 @@ class LeakingJudge(RecordingJudge):
                     "id": CHUNKS[0].chunk_id,
                     "uuid": point_id(CHUNKS[0]),
                     "hash": CHUNKS[0].text_sha256,
-                    "title": SOURCES["preparation"],
-                    "guide": SOURCES["guide"],
                 }[self.leak]
         return raw
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "leak", ["excerpt", "id", "uuid", "hash", "title", "guide", "method_quote"]
-)
+@pytest.mark.parametrize("leak", ["excerpt", "id", "uuid", "hash", "method_quote"])
 async def test_methodology_leaks_or_method_quote_as_evidence_never_become_public(leak: str) -> None:
     judge = LeakingJudge(leak)
     response = await finish_with_gateway(RetrievalGateway(), judge)

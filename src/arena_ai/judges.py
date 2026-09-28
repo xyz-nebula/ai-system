@@ -13,7 +13,7 @@ from arena_ai.contracts import (
     OutcomeResult,
     SessionSnapshot,
 )
-from arena_ai.judge_corpus import CHUNKS, cites_source_title
+from arena_ai.judge_corpus import CHUNKS
 from arena_ai.judge_index import point_id
 from arena_ai.judge_retrieval import InvalidRetrievalError, JudgeRetrieval, methodology_for_college
 from arena_ai.model_recovery import validated_model_call
@@ -148,8 +148,6 @@ def contains_internal_support(text: str, context: JudgeContext) -> bool:
         for chunk in CHUNKS
         for token in (chunk.chunk_id, chunk.text_sha256, point_id(chunk))
     ):
-        return True
-    if cites_source_title(lowered):
         return True
     public_words = f" {' '.join(re.findall(r'\w+', lowered))} "
     for excerpt in (

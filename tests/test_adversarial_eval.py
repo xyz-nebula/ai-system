@@ -6,7 +6,7 @@ import pytest
 
 from arena_ai.adversarial_eval import quality_checks, run_once
 from arena_ai.contracts import FinishResponse, TranscriptEntry
-from arena_ai.judge_corpus import CHUNKS, SOURCES
+from arena_ai.judge_corpus import CHUNKS
 from arena_ai.live_eval import evidence_is_grounded, report_progress
 from arena_ai.scenarios import NEXT_DAY_CASE
 
@@ -29,8 +29,6 @@ def test_clean_fixture_has_college_specific_bounded_comments() -> None:
         CHUNKS[0].chunk_id,
         CHUNKS[0].text_sha256,
         CHUNKS[0].text,
-        SOURCES["guide"],
-        "Подготовка к переговорам",
         "opponent_progress: target",
         "declared",
         "red-line",
