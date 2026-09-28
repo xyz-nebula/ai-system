@@ -1,5 +1,8 @@
 # ai-system
 
+[![CI](https://github.com/xyz-nebula/ai-system/actions/workflows/ci.yml/badge.svg)](https://github.com/xyz-nebula/ai-system/actions/workflows/ci.yml)
+[![Docker](https://github.com/xyz-nebula/ai-system/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/xyz-nebula/ai-system/actions/workflows/docker-publish.yml)
+
 AI-сервис «Арены переговоров»: управляемый ход AI-оппонента (Guard → Opponent → Validator),
 оценка завершённого диалога (исход, три судьи, тренер) и проверка блока подготовки.
 Вызывается только Backend; модель — внешний LocalAI, методология судей — в Qdrant.
@@ -89,3 +92,7 @@ CI (`.github/workflows`): `ci.yml` — lint, format, typecheck, тесты; `doc
 образ `ghcr.io/xyz-nebula/ai-system` с тегами ветки, `sha-…`, semver и `latest`.
 
 Словарь предметной области — [CONTEXT.md](CONTEXT.md), решения — [docs/adr](docs/adr).
+
+## Лицензия
+
+[GNU GPL v3](LICENSE).
