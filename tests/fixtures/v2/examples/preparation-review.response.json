@@ -1,0 +1,22 @@
+{
+  "contract_version": "2.0.0-rc.1",
+  "section_id": "negotiation_goal",
+  "revision_id": "prep-block-1",
+  "status": "ready",
+  "feedback": {
+    "summary": "Цель названа, но критерии результата не уточнены.",
+    "strengths": [
+      "Определён желаемый предмет разговора."
+    ],
+    "weaknesses": [
+      "Не определено, по каким условиям считать цель достигнутой."
+    ],
+    "questions": [
+      "Какой результат будет минимально приемлемым для вас?"
+    ],
+    "improvement_directions": [
+      "Добавить проверяемые условия результата."
+    ]
+  },
+  "error_code": null
+}

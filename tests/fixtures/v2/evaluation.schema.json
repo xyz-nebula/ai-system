@@ -1,0 +1,667 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "EvaluationMessage": {
+      "additionalProperties": false,
+      "description": "One saved dialogue message; order is determined by its list position.",
+      "properties": {
+        "text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        },
+        "is_ai": {
+          "description": "True: AI opponent; false: user.",
+          "title": "Is Ai",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text",
+        "is_ai"
+      ],
+      "title": "EvaluationMessage",
+      "type": "object"
+    },
+    "EvaluationCoachingPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "$ref": "#/$defs/IndexedEvidence"
+        },
+        "action": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Action",
+          "type": "string"
+        },
+        "situation_change": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Situation Change",
+          "type": "string"
+        },
+        "consequence": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Consequence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "action",
+        "situation_change",
+        "consequence"
+      ],
+      "title": "EvaluationCoachingPoint",
+      "type": "object"
+    },
+    "EvaluationGoalAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "achieved",
+            "partially_achieved",
+            "not_achieved",
+            "not_assessable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "goal_text": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Goal Text"
+        },
+        "explanation": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Explanation",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/IndexedEvidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "goal_text",
+        "explanation",
+        "evidence"
+      ],
+      "title": "EvaluationGoalAssessment",
+      "type": "object"
+    },
+    "EvaluationJudgeSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "$ref": "#/$defs/JudgeCollege"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvaluationJudgeVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "judge_unavailable",
+                "invalid_judge_output",
+                "judge_retrieval_unavailable",
+                "invalid_judge_retrieval",
+                "insufficient_evidence"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "college",
+        "status",
+        "verdict",
+        "error_code"
+      ],
+      "title": "EvaluationJudgeSlot",
+      "type": "object"
+    },
+    "EvaluationJudgeVerdict": {
+      "additionalProperties": false,
+      "properties": {
+        "college": {
+          "$ref": "#/$defs/JudgeCollege"
+        },
+        "choice": {
+          "enum": [
+            "player",
+            "opponent"
+          ],
+          "title": "Choice",
+          "type": "string"
+        },
+        "decisive_criterion": {
+          "$ref": "#/$defs/JudgeCriterion"
+        },
+        "evidence": {
+          "$ref": "#/$defs/IndexedEvidence"
+        },
+        "observation": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Observation",
+          "type": "string"
+        },
+        "effect": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Effect",
+          "type": "string"
+        },
+        "comparison": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Comparison",
+          "type": "string"
+        }
+      },
+      "required": [
+        "college",
+        "choice",
+        "decisive_criterion",
+        "evidence",
+        "observation",
+        "effect",
+        "comparison"
+      ],
+      "title": "EvaluationJudgeVerdict",
+      "type": "object"
+    },
+    "EvaluationOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "agreement",
+            "partial_agreement",
+            "deferred",
+            "no_agreement",
+            "not_assessable"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "summary": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Summary",
+          "type": "string"
+        },
+        "agreed_terms": {
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Agreed Terms",
+          "type": "array"
+        },
+        "open_points": {
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Open Points",
+          "type": "array"
+        },
+        "next_step": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Step"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/IndexedEvidence"
+          },
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "summary",
+        "agreed_terms",
+        "open_points",
+        "next_step",
+        "evidence"
+      ],
+      "title": "EvaluationOutcome",
+      "type": "object"
+    },
+    "EvaluationOutcomeSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "const": "dialogue_inference",
+          "default": "dialogue_inference",
+          "title": "Basis",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "assessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvaluationOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "outcome_analysis_unavailable",
+                "invalid_outcome_analysis"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "status",
+        "assessment",
+        "error_code"
+      ],
+      "title": "EvaluationOutcomeSlot",
+      "type": "object"
+    },
+    "EvaluationPreparationComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Summary",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/EvaluationPreparationItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "summary",
+        "items"
+      ],
+      "title": "EvaluationPreparationComparison",
+      "type": "object"
+    },
+    "EvaluationPreparationItem": {
+      "additionalProperties": false,
+      "properties": {
+        "preparation_text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Preparation Text",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "followed",
+            "adapted",
+            "not_observed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndexedEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observation": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Observation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preparation_text",
+        "status",
+        "evidence",
+        "observation"
+      ],
+      "title": "EvaluationPreparationItem",
+      "type": "object"
+    },
+    "EvaluationTrainerFeedback": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Summary",
+          "type": "string"
+        },
+        "strengths": {
+          "items": {
+            "$ref": "#/$defs/EvaluationCoachingPoint"
+          },
+          "title": "Strengths",
+          "type": "array"
+        },
+        "mistakes": {
+          "items": {
+            "$ref": "#/$defs/EvaluationCoachingPoint"
+          },
+          "title": "Mistakes",
+          "type": "array"
+        },
+        "next_try": {
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "title": "Next Try",
+          "type": "array"
+        },
+        "plan_vs_reality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvaluationPreparationComparison"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missed_opportunities": {
+          "items": {
+            "$ref": "#/$defs/EvaluationCoachingPoint"
+          },
+          "title": "Missed Opportunities",
+          "type": "array"
+        },
+        "goal_assessment": {
+          "$ref": "#/$defs/EvaluationGoalAssessment"
+        }
+      },
+      "required": [
+        "summary",
+        "strengths",
+        "mistakes",
+        "next_try",
+        "plan_vs_reality",
+        "missed_opportunities",
+        "goal_assessment"
+      ],
+      "title": "EvaluationTrainerFeedback",
+      "type": "object"
+    },
+    "EvaluationTrainerSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "feedback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvaluationTrainerFeedback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "trainer_unavailable",
+                "invalid_trainer_output",
+                "insufficient_evidence"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "status",
+        "feedback",
+        "error_code"
+      ],
+      "title": "EvaluationTrainerSlot",
+      "type": "object"
+    },
+    "IndexedEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "message_index": {
+          "minimum": 0,
+          "title": "Message Index",
+          "type": "integer"
+        },
+        "is_ai": {
+          "title": "Is Ai",
+          "type": "boolean"
+        },
+        "quote": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Quote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_index",
+        "is_ai",
+        "quote"
+      ],
+      "title": "IndexedEvidence",
+      "type": "object"
+    },
+    "JudgeCollege": {
+      "enum": [
+        "hiring",
+        "negotiation",
+        "ownership"
+      ],
+      "type": "string"
+    },
+    "JudgeCriterion": {
+      "enum": [
+        "Надёжность",
+        "Отношение к людям",
+        "Управленческая твёрдость",
+        "Забота о команде",
+        "Долгосрочные последствия управления",
+        "Движение к цели",
+        "Управление другой стороной",
+        "Работа с картиной мира",
+        "Управление ролями",
+        "Сохранение отношений",
+        "Качество решений",
+        "Компетентность",
+        "Ответственность",
+        "Управление рисками",
+        "Последствия для ресурсов"
+      ],
+      "type": "string"
+    },
+    "Version": {
+      "const": "2.0.0-rc.1",
+      "type": "string"
+    },
+    "EvaluationRequest": {
+      "additionalProperties": false,
+      "description": "Finished dialogue for judges and the post-dialogue trainer.",
+      "properties": {
+        "role": {
+          "description": "AI model's active game role (Backend's system_role); is_ai=true messages.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Role",
+          "type": "string"
+        },
+        "opponent_role": {
+          "description": "User's active game role; is_ai=false messages.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Opponent Role",
+          "type": "string"
+        },
+        "case_description": {
+          "description": "Shared case context and conditions, without hidden opponent information.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Case Description",
+          "type": "string"
+        },
+        "messages": {
+          "description": "Saved dialogue messages in chronological order, selected by Backend.",
+          "items": {
+            "$ref": "#/$defs/EvaluationMessage"
+          },
+          "minItems": 1,
+          "title": "Messages",
+          "type": "array"
+        },
+        "preparations": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "User's personal preparation as one string, not author-provided role briefs.",
+          "title": "Preparations"
+        }
+      },
+      "required": [
+        "role",
+        "opponent_role",
+        "case_description",
+        "messages"
+      ],
+      "title": "EvaluationRequest",
+      "type": "object"
+    },
+    "EvaluationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "$ref": "#/$defs/Version",
+          "default": "2.0.0-rc.1"
+        },
+        "outcome": {
+          "$ref": "#/$defs/EvaluationOutcomeSlot"
+        },
+        "judge_verdicts": {
+          "items": {
+            "$ref": "#/$defs/EvaluationJudgeSlot"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "title": "Judge Verdicts",
+          "type": "array"
+        },
+        "trainer_feedback": {
+          "$ref": "#/$defs/EvaluationTrainerSlot"
+        }
+      },
+      "required": [
+        "outcome",
+        "judge_verdicts",
+        "trainer_feedback"
+      ],
+      "title": "EvaluationResponse",
+      "type": "object"
+    }
+  }
+}

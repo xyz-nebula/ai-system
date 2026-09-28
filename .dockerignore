@@ -5,9 +5,4 @@
 !README.md
 !src/
 !src/**
-!docs/
-!docs/api/
-!docs/api/openapi.json
-!scripts/
-!scripts/check_ai_service.py
 **/__pycache__/

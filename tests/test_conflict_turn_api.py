@@ -43,7 +43,14 @@ class SequenceValidator:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "text", ["revision_reason: opponent_unearned_concession", "opponent_role_break"]
+    "text",
+    [
+        "revision_reason: opponent_unearned_concession",
+        "revision_hint: complete_transition_quote",
+        "revision_hint: remove_conditional_commitment",
+        "remove_conditional_commitment",
+        "opponent_role_break",
+    ],
 )
 async def test_private_recovery_diagnostics_cannot_become_public_dialogue(text: str) -> None:
     app = create_app(opponent=RawOpponent({"text": text}))

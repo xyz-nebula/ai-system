@@ -82,9 +82,7 @@ def player_evidence_is_grounded(
     )
 
 
-def preparation_comparison_is_grounded(
-    feedback: TrainerFeedback, context: TrainerContext
-) -> bool:
+def preparation_comparison_is_grounded(feedback: TrainerFeedback, context: TrainerContext) -> bool:
     comparison = feedback.plan_vs_reality
     if context.preparation is None:
         return comparison is None
@@ -180,6 +178,7 @@ async def train_duel(
         outcome=outcome,
         preparation=preparation,
     )
+
     def validated_feedback(raw: object) -> TrainerFeedback | None:
         try:
             feedback = TrainerFeedback.model_validate(raw)

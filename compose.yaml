@@ -1,0 +1,66 @@
+# AI-сервис «Арены переговоров» с retrieval для судей: `docker compose up -d`.
+# LocalAI внешний (ARENA_QWEN_CHAT_URL в .env); Qdrant и эмбеддинги поднимаются здесь.
+name: arena-ai
+
+services:
+  ai:
+    image: ghcr.io/xyz-nebula/ai-system:${ARENA_IMAGE_TAG:-dev}
+    build: .
+    env_file: .env
+    environment:
+      ARENA_SERVICE_TOKEN: ${ARENA_SERVICE_TOKEN:?Задайте ARENA_SERVICE_TOKEN в .env}
+      ARENA_MODEL_MODE: qwen
+      ARENA_V2_ENABLED: "true"
+      ARENA_QDRANT_URL: http://qdrant:6333
+      ARENA_EMBEDDINGS_URL: http://embeddings:80
+    ports:
+      - "${ARENA_BIND_IP:-127.0.0.1}:${ARENA_PORT:-8000}:8000"
+    depends_on:
+      - qdrant
+      - embeddings
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    logging: *logging
+
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    command: ["--model-id", "Qwen/Qwen3-Embedding-0.6B", "--port", "80", "--max-batch-tokens", "2048"]
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - embeddings_cache:/data
+    restart: unless-stopped
+    logging: *logging
+
+# Имена совпадают с прежним стеком arena-rag: на сервере сохраняется готовый индекс судей.
+volumes:
+  qdrant_data:
+    name: arena-rag_qdrant_data
+  embeddings_cache:
+    name: arena-rag_embeddings_cache

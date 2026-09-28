@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -107,7 +106,7 @@ def main() -> None:
             "process_live",
             "model_ready",
             "service_info",
-            "openapi_matches",
+            "openapi_available",
             "turn_requires_token",
             "finish_requires_token",
             "turn_validates_request",
@@ -118,9 +117,6 @@ def main() -> None:
     headers = {"Authorization": f"Bearer {token}"}
     report: dict[str, object] = {"checks": checks}
     try:
-        schema = json.loads(
-            (Path(__file__).resolve().parents[1] / "docs/api/openapi.json").read_text()
-        )
         with httpx.Client(base_url=args.api_url, timeout=args.timeout) as client:
             live = client.get("/health/live")
             checks["process_live"] = live.status_code == 200 and live.json() == {"status": "alive"}
@@ -131,7 +127,14 @@ def main() -> None:
             info = client.get("/v1/info")
             checks["service_info"] = info.status_code == 200 and info.json().get("mode") == "qwen"
             api = client.get("/openapi.json")
-            checks["openapi_matches"] = api.status_code == 200 and api.json() == schema
+            checks["openapi_available"] = (
+                api.status_code == 200
+                and {
+                    "/v1/turn",
+                    "/v1/finish",
+                }
+                <= api.json().get("paths", {}).keys()
+            )
             for role in ("turn", "finish"):
                 checks[f"{role}_requires_token"] = (
                     client.post(f"/v1/{role}", json={}).status_code == 401

@@ -1,4 +1,6 @@
-# Python bytecode, environments, and build output
+.claude/
+
+# Python environments and generated artifacts
 __pycache__/
 *.py[cod]
 *.so
@@ -8,7 +10,7 @@ build/
 dist/
 *.egg-info/
 
-# Test and type-checker output
+# Test and static-analysis caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -17,7 +19,7 @@ dist/
 .coverage.*
 htmlcov/
 
-# Local settings, secrets, and runtime data
+# Secrets and local runtime data; templates remain versioned
 .env
 .env.*
 !.env.example
@@ -26,16 +28,16 @@ htmlcov/
 *.sqlite3
 *.db
 
-# Editor and OS files
+# Editor and OS artifacts
 .idea/
 .vscode/
 .DS_Store
 
-# Local copies and agent runtime state
+# Local agent state and external reference checkouts
 /.scratch/
 /.secrets/
-/docs/integration/team-messages.md
-/knowledge-base/
-/dev-context.md
 /.agents/
 /.codex/
+/knowledge-base/
+/dev-context.md
+/docs/integration/team-messages.md

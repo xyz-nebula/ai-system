@@ -15,6 +15,7 @@ from arena_ai.qwen import (
     QwenTrainer,
     QwenValidator,
 )
+from arena_ai.v2.turn import QwenTurnPipeline
 
 
 @dataclass(frozen=True)
@@ -30,11 +31,15 @@ class QwenRuntime:
     model_attempts: int
     retrieval: QdrantJudgeRetrieval
     owned_retrieval_http: httpx.AsyncClient | None
+    v2_pipeline: QwenTurnPipeline
 
 
 def build_qwen_runtime(
     model_http: httpx.AsyncClient | None = None,
     retrieval_http: httpx.AsyncClient | None = None,
+    *,
+    v2_timeout_seconds: float = 60,
+    v2_max_model_calls: int = 8,
 ) -> QwenRuntime:
     settings = QwenSettings.from_env()
     retrieval_settings = RetrievalSettings.from_env()
@@ -78,4 +83,10 @@ def build_qwen_runtime(
         model_attempts=settings.model_attempts,
         retrieval=QdrantJudgeRetrieval(actual_retrieval_http, retrieval_settings),
         owned_retrieval_http=actual_retrieval_http if retrieval_http is None else None,
+        v2_pipeline=QwenTurnPipeline(
+            actual_http,
+            settings,
+            total_timeout_seconds=v2_timeout_seconds,
+            max_model_calls=v2_max_model_calls,
+        ),
     )

@@ -1,0 +1,308 @@
+{
+  "case": {
+    "id": "demo-supply-v2",
+    "config_version": "demo-1",
+    "title": "Учебный пример: поставка",
+    "shared_context": "Покупатель и поставщик обсуждают цену и срок поставки. Все значения вымышлены.",
+    "participants": [
+      {
+        "id": "buyer",
+        "name": "Покупатель",
+        "public_context": "Закупает товар",
+        "public_interests": [
+          "Надёжная поставка"
+        ]
+      },
+      {
+        "id": "supplier",
+        "name": "Поставщик",
+        "public_context": "Поставляет товар",
+        "public_interests": [
+          "Оплата поставки"
+        ]
+      }
+    ],
+    "player": {
+      "role_id": "buyer",
+      "private_context": "Учебные вводные покупателя.",
+      "interests": [
+        {
+          "text": "Снизить цену",
+          "visibility": "private"
+        }
+      ],
+      "batna": "Обратиться к другому поставщику.",
+      "negotiation_goal": null,
+      "declared_position": null,
+      "desired_position": null,
+      "red_line": null,
+      "role_preparation": null
+    },
+    "opponent": {
+      "role_id": "supplier",
+      "private_context": "Учебные вводные поставщика.",
+      "interests": [
+        {
+          "text": "Предсказуемый объём заказов",
+          "visibility": "private"
+        }
+      ],
+      "batna": "Сохранить текущую цену.",
+      "negotiation_goal": null,
+      "declared_position": null,
+      "desired_position": null,
+      "red_line": null,
+      "role_preparation": null
+    },
+    "negotiables": [
+      {
+        "id": "price_per_unit",
+        "label": "Цена за единицу",
+        "value_type": "number",
+        "unit": "RUB/item",
+        "choices": []
+      },
+      {
+        "id": "delivery_days",
+        "label": "Срок поставки",
+        "value_type": "number",
+        "unit": "day",
+        "choices": []
+      }
+    ],
+    "opponent_strategy": {
+      "steps": [
+        {
+          "id": "declared",
+          "kind": "declared",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 5000
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 14
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 14 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 5000 рублей за единицу"
+              }
+            ]
+          },
+          "requires": [],
+          "constraint_ids": [
+            "declared-price_per_unit",
+            "declared-delivery_days"
+          ]
+        },
+        {
+          "id": "target",
+          "kind": "target",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 4800
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 12
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 12 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 4800 рублей за единицу"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "order-volume",
+              "description": "Покупатель гарантирует согласованный объём заказа",
+              "direct_commitment_markers": [
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "объём",
+                  "заказ"
+                ]
+              ]
+            }
+          ],
+          "constraint_ids": [
+            "target-price_per_unit",
+            "target-delivery_days"
+          ]
+        },
+        {
+          "id": "red-line",
+          "kind": "red_line",
+          "terms": {
+            "values": [
+              {
+                "term_id": "price_per_unit",
+                "value": 4600
+              },
+              {
+                "term_id": "delivery_days",
+                "value": 10
+              }
+            ],
+            "commitments": [
+              {
+                "role_id": "supplier",
+                "text": "Поставить товар за 10 дней"
+              },
+              {
+                "role_id": "buyer",
+                "text": "Оплатить товар по цене 4600 рублей за единицу"
+              }
+            ]
+          },
+          "requires": [
+            {
+              "id": "prepayment",
+              "description": "Покупатель берёт обязательство согласованной предоплаты",
+              "direct_commitment_markers": [
+                "обязуюсь"
+              ],
+              "evidence_groups": [
+                [
+                  "предоплат"
+                ]
+              ]
+            }
+          ],
+          "constraint_ids": [
+            "red-line-price_per_unit",
+            "red-line-delivery_days"
+          ]
+        }
+      ]
+    },
+    "opponent_private_phrases": [
+      "Учебные вводные поставщика"
+    ],
+    "contract_version": "2.0.0-rc.1",
+    "possible_outcomes": [],
+    "agreement_policy": {
+      "constraints": [
+        {
+          "id": "hard-price_per_unit",
+          "kind": "numeric_range",
+          "term_id": "price_per_unit",
+          "minimum": 4600,
+          "maximum": 5000
+        },
+        {
+          "id": "hard-delivery_days",
+          "kind": "numeric_range",
+          "term_id": "delivery_days",
+          "minimum": 10,
+          "maximum": 14
+        },
+        {
+          "id": "declared-price_per_unit",
+          "kind": "numeric_range",
+          "term_id": "price_per_unit",
+          "minimum": 5000,
+          "maximum": 5000
+        },
+        {
+          "id": "declared-delivery_days",
+          "kind": "numeric_range",
+          "term_id": "delivery_days",
+          "minimum": 14,
+          "maximum": 14
+        },
+        {
+          "id": "target-price_per_unit",
+          "kind": "numeric_range",
+          "term_id": "price_per_unit",
+          "minimum": 4800,
+          "maximum": 4800
+        },
+        {
+          "id": "target-delivery_days",
+          "kind": "numeric_range",
+          "term_id": "delivery_days",
+          "minimum": 12,
+          "maximum": 12
+        },
+        {
+          "id": "red-line-price_per_unit",
+          "kind": "numeric_range",
+          "term_id": "price_per_unit",
+          "minimum": 4600,
+          "maximum": 4600
+        },
+        {
+          "id": "red-line-delivery_days",
+          "kind": "numeric_range",
+          "term_id": "delivery_days",
+          "minimum": 10,
+          "maximum": 10
+        }
+      ],
+      "hard_constraint_ids": [
+        "hard-price_per_unit",
+        "hard-delivery_days"
+      ],
+      "commitment_rules": [
+        {
+          "id": "explicit-player-commitment",
+          "role_id": "buyer",
+          "description": "Явно принять конкретное обязательство, связанное с обсуждаемыми условиями."
+        }
+      ],
+      "required_commitment_ids": [
+        "explicit-player-commitment"
+      ]
+    }
+  },
+  "snapshot": {
+    "schema_version": "2.0.0-rc.1",
+    "session_id": "demo-supply-session",
+    "case_id": "demo-supply-v2",
+    "case_config_version": "demo-1",
+    "player_role_id": "buyer",
+    "opponent_role_id": "supplier",
+    "state": {
+      "turn_count": 0,
+      "stage": "negotiating",
+      "agreement": null,
+      "decision": null,
+      "opponent_progress": null
+    },
+    "transcript": [],
+    "revision": 0,
+    "round": {
+      "status": "open",
+      "started_at": "2026-09-26T10:00:00Z",
+      "deadline_at": "2026-09-26T10:05:00Z",
+      "finished_at": null,
+      "end_reason": null
+    }
+  },
+  "turn_id": "demo-supply-turn-001",
+  "user_text": "Предлагаю обсудить цену и срок поставки.",
+  "contract_version": "2.0.0-rc.1",
+  "user_message_id": "supply-message-player-001",
+  "opponent_message_id": "supply-message-opponent-001",
+  "user_created_at": "2026-09-26T10:00:10Z",
+  "user_elapsed_ms": 10000
+}

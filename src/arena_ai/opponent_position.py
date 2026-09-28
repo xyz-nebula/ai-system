@@ -21,6 +21,14 @@ class UnearnedConcessionError(ValueError):
     """The proposed public position improves without earned transition evidence."""
 
 
+class IncompleteTransitionEvidenceError(UnearnedConcessionError):
+    """The transition quote is not the complete current user turn."""
+
+
+class ConditionalPositionCommitmentError(UnearnedConcessionError):
+    """The public response introduces a conditional commitment."""
+
+
 PRIVATE_POSITION_SCHEMA_MARKERS = {
     "opponent_strategy",
     "opponent_progress",
@@ -215,7 +223,7 @@ def apply_position_transition(
     if set(required_ids) & set(satisfied_ids):
         raise UnearnedConcessionError("position transition needs new concession requirements")
     if transition.evidence_quote.strip() != user_text.strip():
-        raise UnearnedConcessionError(
+        raise IncompleteTransitionEvidenceError(
             "position transition evidence must quote the full current user turn"
         )
     evidence = transition.evidence_quote.casefold()
@@ -251,7 +259,9 @@ def apply_position_transition(
             )
     visible_text = visible_proposal_text(proposal)
     if _contains_conditional_commitment(visible_text):
-        raise UnearnedConcessionError("position transition response cannot add a new condition")
+        raise ConditionalPositionCommitmentError(
+            "position transition response cannot add a new condition"
+        )
     if isinstance(proposal.resolution, (PartialDecision, DeferredDecision)):
         raise UnearnedConcessionError(
             "position transition cannot carry a partial or deferred decision"
@@ -310,7 +320,9 @@ def _reject_untracked_terms(current_terms: DealTerms, proposal: OpponentProposal
 
     visible_text = visible_proposal_text(proposal)
     if _contains_conditional_commitment(visible_text):
-        raise UnearnedConcessionError("position response cannot add a conditional commitment")
+        raise ConditionalPositionCommitmentError(
+            "position response cannot add a conditional commitment"
+        )
     stated_terms = _extract_control_days_and_kpis(visible_text)
     if stated_terms is None:
         if _contains_position_term_signal(visible_text):

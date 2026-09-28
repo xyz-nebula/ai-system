@@ -216,9 +216,7 @@ async def test_trainer_recovers_from_one_invalid_result() -> None:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
-        response = await client.post(
-            "/v1/finish", json={"case": CASE, "snapshot": SNAPSHOT}
-        )
+        response = await client.post("/v1/finish", json={"case": CASE, "snapshot": SNAPSHOT})
 
     assert response.status_code == 200
     assert response.json()["trainer_feedback"]["status"] == "ready"

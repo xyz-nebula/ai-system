@@ -1,0 +1,87 @@
+{
+  "session_id": "demo-session-001",
+  "outcome": {
+    "kind": "no_agreement",
+    "summary": "Условия обсуждены, взаимного согласия пока нет.",
+    "agreement": null,
+    "commitments": [],
+    "open_points": [],
+    "next_step": null,
+    "reason": null,
+    "analysis_status": "ready",
+    "analysis_error_code": null,
+    "concessions": [],
+    "costs": [],
+    "consequences": [],
+    "evidence": []
+  },
+  "judge_verdicts": [
+    {
+      "college": "hiring",
+      "status": "ready",
+      "verdict": {
+        "college": "hiring",
+        "choice": "opponent",
+        "decisive_criterion": "Надёжность",
+        "observation": "Менеджер запросил условия, но не взял обязательств.",
+        "effect": "Проверяемая ответственность ещё не согласована.",
+        "comparison": "Директор назвал условия контроля, менеджер пока ограничился вопросом.",
+        "evidence": {
+          "message_id": "next-day-message-player-001",
+          "turn_id": "demo-turn-001",
+          "speaker": "player",
+          "elapsed_ms": 10000,
+          "quote": "Какие условия вы предлагаете?"
+        }
+      },
+      "error_code": null
+    },
+    {
+      "college": "negotiation",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "judge_unavailable"
+    },
+    {
+      "college": "ownership",
+      "status": "failed",
+      "verdict": null,
+      "error_code": "judge_retrieval_unavailable"
+    }
+  ],
+  "trainer_feedback": {
+    "status": "ready",
+    "feedback": {
+      "summary": "Пользователь начал с выяснения условий.",
+      "strengths": [
+        {
+          "action": "Запросил позицию директора.",
+          "situation_change": "Директор назвал измеримые условия.",
+          "consequence": "Появилась основа для следующего предложения.",
+          "evidence": {
+            "message_id": "next-day-message-player-001",
+            "turn_id": "demo-turn-001",
+            "speaker": "player",
+            "elapsed_ms": 10000,
+            "quote": "Какие условия вы предлагаете?"
+          }
+        }
+      ],
+      "mistakes": [],
+      "next_try": [
+        "Уточнить, какие обязательства нужны в обмен на уступку.",
+        "Перед согласием зафиксировать сроки и критерии."
+      ],
+      "plan_vs_reality": null,
+      "missed_opportunities": [],
+      "goal_assessment": {
+        "status": "not_assessable",
+        "goal_text": null,
+        "explanation": "Пользовательская подготовка отсутствует, явная личная цель не задана.",
+        "evidence": []
+      }
+    },
+    "error_code": null
+  },
+  "contract_version": "2.0.0-rc.1"
+}

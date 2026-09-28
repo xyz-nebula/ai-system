@@ -1,0 +1,55 @@
+{
+  "contract_version": "2.0.0-rc.1",
+  "context": {
+    "case_id": "demo-next-day-v2",
+    "case_config_version": "demo-1",
+    "title": "Учебный пример: разговор о повышении",
+    "shared_context": "Менеджер и директор обсуждают повышение после отсутствия на работе. В ситуации участвует HR. Это вымышленный пример конфигурации для проектирования интерфейса, не утверждённые вводные кейса.",
+    "participants": [
+      {
+        "id": "manager",
+        "name": "Менеджер",
+        "public_context": "Менеджер по продажам",
+        "public_interests": [
+          "Сохранить рабочие отношения"
+        ]
+      },
+      {
+        "id": "director",
+        "name": "Генеральный директор",
+        "public_context": "Принимает решение о повышении",
+        "public_interests": [
+          "Предсказуемость работы"
+        ]
+      },
+      {
+        "id": "hr",
+        "name": "HR",
+        "public_context": "Участник ситуации, не активный собеседник",
+        "public_interests": [
+          "Сохранить сотрудника и трудовую дисциплину"
+        ]
+      }
+    ],
+    "player": {
+      "role_id": "manager",
+      "private_context": "Учебные закрытые вводные менеджера.",
+      "interests": [
+        {
+          "text": "Сохранить договорённость о повышении",
+          "visibility": "private"
+        }
+      ],
+      "batna": null,
+      "negotiation_goal": null,
+      "declared_position": null,
+      "desired_position": null,
+      "red_line": null,
+      "role_preparation": null
+    },
+    "opponent_role_id": "director"
+  },
+  "section_id": "negotiation_goal",
+  "block_text": "Добиться повышения.",
+  "revision_id": "prep-block-1"
+}

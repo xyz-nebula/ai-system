@@ -1,157 +1,98 @@
-# Арена переговоров — AI-сервис
+# ai-system
 
-AI-контур тренажёра переговоров на Python и FastAPI: управляемый ход с Guard и
-Validator, AI-оппонент, три независимых судьи и отдельный тренерский разбор.
-Backend хранит кейс и состояние поединка; STT/TTS принадлежат Audio Engine.
+[![CI](https://github.com/xyz-nebula/ai-system/actions/workflows/ci.yml/badge.svg)](https://github.com/xyz-nebula/ai-system/actions/workflows/ci.yml)
+[![Docker](https://github.com/xyz-nebula/ai-system/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/xyz-nebula/ai-system/actions/workflows/docker-publish.yml)
+
+AI-сервис «Арены переговоров»: управляемый ход AI-оппонента (Guard → Opponent → Validator),
+оценка завершённого диалога (исход, три судьи, тренер) и проверка блока подготовки.
+Вызывается только Backend; модель — внешний LocalAI, методология судей — в Qdrant.
 
 ## Запуск
 
-Требуются Python `>=3.13` и [uv](https://docs.astral.sh/uv/).
-Команды выполняются из корня репозитория.
+Нужны Docker с Compose и доступный LocalAI с моделью `qwen3.8-9b-q4`.
 
 ```bash
-uv sync --locked
-cp .env.example .env
-uv run --env-file .env uvicorn arena_ai.app:app --host 127.0.0.1 --port 8000 --reload
+cp .env.example .env        # задать ARENA_SERVICE_TOKEN и ARENA_BIND_IP
+docker compose up -d        # AI + Qdrant + эмбеддинги
+curl http://<ARENA_BIND_IP>:8000/health/ready
 ```
 
-По умолчанию включён `demo`: модель и RAG не нужны, ответы демонстрационные.
-В другом терминале запустите текстовый клиент:
+`docker compose up -d` берёт образ `ghcr.io/xyz-nebula/ai-system:dev` (собирается CI из
+ветки `dev`; для приватного пакета — `docker login ghcr.io`). Собрать локально:
+`docker compose up -d --build`. Другая ветка или коммит: `ARENA_IMAGE_TAG=main`.
+
+Qdrant и эмбеддинги доступны только с сервера (`127.0.0.1:6333`, `127.0.0.1:8081`).
+Тома называются `arena-rag_*`, поэтому существующий индекс судей переиспользуется.
+Для пустого Qdrant проиндексируйте методологию (исходные материалы не хранятся в репозитории):
 
 ```bash
-uv run arena-ai --api-url http://127.0.0.1:8000
+uv run python scripts/index_judge_corpus.py --source-root <папка-с-материалами>
+uv run python scripts/index_judge_corpus.py --check-index
 ```
 
-Команды клиента: `:history`, `:finish`, `:quit`. Необязательная карточка подготовки:
+Без индекса судьи возвращают `judge_retrieval_unavailable`, остальные слоты работают.
 
-```bash
-uv run arena-ai --preparation-file docs/api/examples/preparation-card.json
-```
+## Настройки (`.env`)
 
-Интерактивный клиент предназначен для локального запуска без service token.
-Защищённый сервер проверяйте через API или smoke-команды ниже.
-
-## Модель и RAG
-
-Для реальных ответов измените `.env`:
-
-```dotenv
-ARENA_MODEL_MODE=qwen
-ARENA_QWEN_CHAT_URL=http://localhost:8080/v1/chat/completions
-ARENA_QWEN_MODEL=qwen3.8-9b-q4
-ARENA_QDRANT_URL=http://127.0.0.1:6333
-ARENA_EMBEDDINGS_URL=http://127.0.0.1:8081
-```
-
-Нужен OpenAI-compatible Chat Completions gateway. Адрес и model ID должны
-соответствовать вашей среде; `localhost` означает машину, где работает AI-сервис.
-`.env` загружается через `uv run --env-file`, не самим приложением.
-
-Судьи требуют Qdrant, Qwen3 embeddings и загруженный проверенный корпус:
-
-```bash
-docker compose -f deploy/rag/compose.yaml up -d
-uv run --env-file .env python scripts/check_rag_stack.py
-```
-
-Qdrant и TEI слушают только loopback. Первый запуск TEI скачивает веса модели.
-Для первичного индексирования нужны согласованные исходные страницы методик в
-`knowledge-base/methodology/`; они предоставляются отдельно и не входят в этот репозиторий:
-
-```bash
-uv run --env-file .env python scripts/index_judge_corpus.py --verify-only
-uv run --env-file .env python scripts/index_judge_corpus.py
-uv run --env-file .env python scripts/index_judge_corpus.py --check-index
-```
-
-Если используете уже заполненный серверный индекс, повторно загружать корпус не нужно.
-Подробности: [корпус и retrieval](docs/judge-corpus.md).
-Readiness проверяет только модель, не готовность RAG. Ошибка retrieval даёт failed-слот
-судьи, а не демонстрационный вердикт. Методики не выводятся в итоговой аналитике.
-
-## Docker
-
-Для нового серверного запуска требуются Linux, Docker Compose, доступ к gateway и готовому RAG.
-Подставьте приватный IP своей среды; команды ниже выполняются из checkout:
-
-```bash
-mkdir -m 700 .secrets
-python3 scripts/provision_ai_env.py \
-  --destination .secrets/.env --bind-ip 172.16.34.7
-docker build -t arena-ai:local .
-export ARENA_IMAGE=arena-ai:local
-export ARENA_ENV_FILE="$PWD/.secrets/.env"
-docker compose --env-file "$ARENA_ENV_FILE" -f deploy/ai/compose.yaml up -d --no-deps ai
-```
-
-Проверьте gateway/RAG URLs в созданном env и убедитесь, что порт 8000 свободен.
-`.secrets/` исключён из Git и build context; не добавляйте его принудительно.
-Provision генерирует service token и отказывается перезаписывать существующие секреты.
-Compose использует host networking, непривилегированный процесс и read-only filesystem;
-он не запускает и не меняет LocalAI или RAG. Публичный интернет-доступ не настроен.
-Обновление, откат и подключение команд: [серверный запуск](docs/integration/server-deployment.md).
+| Переменная | Назначение |
+| --- | --- |
+| `ARENA_SERVICE_TOKEN` | Общий с Backend секрет, обязателен |
+| `ARENA_BIND_IP` | IP, на котором слушает порт 8000; для Backend — приватный IP сервера |
+| `ARENA_QWEN_CHAT_URL`, `ARENA_QWEN_MODEL` | Chat Completions LocalAI и модель |
+| `ARENA_QWEN_*_EXTRA_BODY` | Параметры вызова: генератор судьи без thinking (`metadata`), проверяющие — с thinking |
+| `ARENA_EVALUATE_VALIDATION` | `soft` — без модельных проверок `/v2/evaluate`, `strict` — все проверки |
+| `ARENA_QWEN_API_KEY` | Ключ LocalAI, если нужен |
 
 ## API
 
-| Endpoint | Назначение |
+POST-запросы требуют `Authorization: Bearer <ARENA_SERVICE_TOKEN>` и
+`X-Arena-Contract-Version: 2.0.0-rc.1`. Полные схемы: `/docs` и `/openapi.json`.
+
+| Маршрут | Что делает |
 | --- | --- |
-| `GET /health/live` | Проверка HTTP-процесса |
-| `GET /health/ready` | Проверка gateway и наличия модели |
-| `GET /v1/info` | Режим и model ID |
-| `POST /v1/turn` | Проверенный ход и обновлённый снимок |
-| `POST /v1/finish` | Фактический исход, три судьи и Trainer |
-| `GET /openapi.json` | Схема API |
+| `GET /health/live`, `GET /health/ready` | Процесс жив; LocalAI и модель доступны |
+| `POST /v2/evaluate` | Оценка сохранённого диалога: исход, судьи `hiring`/`negotiation`/`ownership`, тренер |
+| `POST /v2/turn` | Управляемый ход оппонента по снимку поединка |
+| `POST /v2/finish` | Итог поединка по замороженному снимку |
+| `POST /v2/preparation/review` | Обратная связь по одному блоку подготовки |
 
-При заданном `ARENA_SERVICE_TOKEN` turn/finish требуют `Authorization: Bearer <token>`.
-Токен предназначен только для Backend, не для браузера. В deployment он обязателен;
-не публикуйте `.env`, полные снимки и закрытые вводные.
+Пример `/v2/evaluate`. `role` — роль **модели** (реплики `is_ai: true`), `opponent_role` —
+роль пользователя:
 
-`accepted` и `blocked` возвращают следующий снимок; `model_error` не продвигает поединок.
-Backend управляет порядком ходов и повторной доставкой. Не повторяйте публичный запрос
-автоматически после неоднозначного timeout. Соглашение не завершает раунд: таймер и
-вызов finish принадлежат Backend. Failed-слот судьи/Trainer не отменяет готовые слоты.
-
-[Контракт и примеры](docs/api/README.md) · [Интеграция команд](docs/api/duel-quality-handoff.md)
-
-## Проверки
-
-```bash
-uv run pytest
-uv run ruff check src tests scripts
-uv run ty check
-uv run python scripts/export_openapi.py --check
+```json
+{
+  "role": "Генеральный директор",
+  "opponent_role": "Менеджер",
+  "case_description": "Переговоры о повышении после пропущенного рабочего дня.",
+  "messages": [
+    {"text": "Предлагаю две недели контроля и KPI 120%.", "is_ai": false},
+    {"text": "Согласен: две недели контроля и KPI 120%.", "is_ai": true}
+  ],
+  "preparations": "Моя цель — согласовать измеримые условия повышения."
+}
 ```
 
-Обычные тесты не требуют живых моделей. Проверка настоящих методических страниц
-пропускается, если отдельно предоставленные исходники отсутствуют.
+Ответ всегда HTTP 200 при валидном запросе; каждый слот отдельно `ready` или `failed`
+с `error_code`. `failed` — «оценка недоступна», не проигрыш. Один запрос идёт 30–60 с,
+при нескольких одновременных — дольше: таймаут на стороне Backend не меньше 300 с.
 
-Серверный smoke использует токен из окружения контейнера:
-
-```bash
-docker exec arena-ai-ai-1 python scripts/check_ai_service.py \
-  --api-url http://172.16.34.7:8000
-docker exec arena-ai-ai-1 python scripts/check_ai_service.py \
-  --api-url http://172.16.34.7:8000 --live-duel --timeout 900
-```
-
-Вторая команда вызывает модель: один ход и finish. Это не полная приёмка.
-Для конфликтного сценария с продолжением после соглашения:
+## Разработка
 
 ```bash
-uv run --env-file .env arena-ai-eval --api-url http://127.0.0.1:8000 \
-  --scenario adversarial --runs 1 --timeout 900 --progress \
-  --output /tmp/arena-adversarial.json
+uv sync --dev
+just check      # ruff, format, ty, pytest
+just run-dev    # локально без Docker, с переменными из .env
 ```
 
-Отчёты содержат безопасные статусы, не реплики и секреты.
-Полная adversarial-приёмка пока не пройдена: известен отказ конструктивного хода
-`opponent_unearned_concession`. Минимальный серверный turn/finish проверен на живом
-Qwen, но сквозная интеграция Backend/Frontend/Audio Engine остаётся отдельным этапом.
+Живые тесты с LocalAI включаются явно:
+`ARENA_RUN_LIVE_V2=1 uv run pytest tests/test_v2_evaluate_http.py -k live` (нужны
+`ARENA_QWEN_CHAT_URL` и `ARENA_QWEN_MODEL`).
 
-## Документация
+CI (`.github/workflows`): `ci.yml` — lint, format, typecheck, тесты; `docker-publish.yml` —
+образ `ghcr.io/xyz-nebula/ai-system` с тегами ветки, `sha-…`, semver и `latest`.
 
-- [Корпус судей](docs/judge-corpus.md)
-- [Словарь проекта](CONTEXT.md) и [архитектурные решения](docs/adr/)
-- [База знаний команды](https://github.com/xyz-nebula/knowledge-base)
+Словарь предметной области — [CONTEXT.md](CONTEXT.md), решения — [docs/adr](docs/adr).
 
-Локальные задачи, черновики и отчёты в `.scratch/` не публикуются в Git.
+## Лицензия
+
+[GNU GPL v3](LICENSE).

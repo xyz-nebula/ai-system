@@ -16,6 +16,7 @@ arena-ai-eval = "arena_ai.live_eval:main"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4,<5",
     "pytest>=8,<10",
     "ruff>=0.11,<1",
     "ty",

@@ -10,7 +10,7 @@ from arena_ai.judge_corpus import CHUNKS, SOURCES
 from arena_ai.live_eval import evidence_is_grounded, report_progress
 from arena_ai.scenarios import NEXT_DAY_CASE
 
-EXAMPLE = Path(__file__).resolve().parents[1] / "docs/api/examples/preparation-finish.json"
+EXAMPLE = Path(__file__).resolve().parents[1] / "tests/fixtures/v1/preparation-finish.json"
 
 
 def finished_example() -> FinishResponse:
