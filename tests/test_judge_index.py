@@ -230,7 +230,7 @@ def test_collection_name_guard_rejects_unrelated_targets_before_network_calls() 
     assert fake.requests == []
 
 
-@pytest.mark.parametrize("field", ["text", "source_path", "text_sha256", "corpus_version"])
+@pytest.mark.parametrize("field", ["text", "section", "text_sha256", "corpus_version"])
 def test_read_only_check_rejects_changed_text_or_provenance(field: str) -> None:
     fake = MemoryRag()
     _index(fake)
