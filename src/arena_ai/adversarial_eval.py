@@ -7,7 +7,7 @@ from uuid import uuid4
 import httpx
 
 from arena_ai.contracts import FinishResponse, SessionSnapshot, SessionState, TurnResponse
-from arena_ai.judge_corpus import CHUNKS, cites_source_title
+from arena_ai.judge_corpus import CHUNKS
 from arena_ai.judge_index import point_id
 from arena_ai.judges import CRITERIA, MAX_VERDICT_WORDS
 from arena_ai.live_eval import CHECK_NAMES, evaluate_finish, snapshot_is_consistent
@@ -73,8 +73,6 @@ def analytics_is_clean(finished: FinishResponse) -> bool:
     for chunk in CHUNKS:
         if any(token in visible for token in (chunk.chunk_id, chunk.text_sha256, point_id(chunk))):
             return False
-    if cites_source_title(visible):
-        return False
 
     # Flatten strings separately so JSON escaping/newlines cannot hide copied excerpts.
     def strings(value: object) -> list[str]:

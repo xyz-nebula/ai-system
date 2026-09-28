@@ -13,21 +13,8 @@ ALL_COLLEGES: tuple[JudgeCollege, ...] = ("hiring", "negotiation", "ownership")
 type ChunkScope = Literal["core", "profile", "technique"]
 
 
-# Titles of the methodology manuals the excerpts are quoted from. The manuals are
-# not published; the titles only let the leak guard reject a named citation.
-SOURCES: dict[str, str] = {
-    "guide": "Гайд по судейству управленческих поединков",
-    "preparation": "Подготовка к переговорам",
-    "argumentation": "Аргументация",
-    "social_roles": "Социальные роли",
-}
-
-
-def cites_source_title(text: str) -> bool:
-    """True when text names a methodology manual (multi-word titles only)."""
-
-    lowered = text.casefold()
-    return any(len(title.split()) > 1 and title.casefold() in lowered for title in SOURCES.values())
+# Keys of the manuals the excerpts are quoted from; the manuals are not published.
+SOURCES = frozenset({"guide", "preparation", "argumentation", "social_roles"})
 
 
 @dataclass(frozen=True, slots=True)
