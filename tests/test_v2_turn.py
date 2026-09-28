@@ -28,7 +28,8 @@ def settings() -> QwenSettings:
 def request() -> TurnRequest:
     return TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
 

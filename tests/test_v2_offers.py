@@ -4,7 +4,7 @@ import pytest
 
 from arena_ai.v2.contracts import TurnRequest
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
 
 
 def request() -> TurnRequest:
@@ -82,6 +82,7 @@ def test_checked_offer_uses_current_window_and_does_not_mutate_the_request() -> 
         ),
     )
     assert result.opponent_progress.current_step_id == "declared"
+    assert result.terms is not None
     assert result.terms.values[0].value == 5000
     result.terms.values[0].value = 1
     assert turn.model_dump_json() == before
@@ -105,10 +106,8 @@ def test_semantically_unchecked_or_mismatched_offer_is_rejected(
         check_offer(
             turn,
             offer,
-            OfferAssessment(
-                decision=decision,
-                terms_match_text=matches,
-                concession_proofs=[],
+            OfferAssessment.model_validate(
+                {"decision": decision, "terms_match_text": matches, "concession_proofs": []}
             ),
         )
 
@@ -157,6 +156,7 @@ def test_earned_adjacent_concession_records_current_user_evidence() -> None:
     )
     assert result.opponent_progress.current_step_id == "target"
     assert result.opponent_progress.satisfied_requirement_ids == ["order-volume"]
+    assert result.opponent_progress.last_transition is not None
     assert result.opponent_progress.last_transition.evidence.message_id == turn.user_message_id
     assert turn.snapshot.state.opponent_progress is None
 
@@ -233,10 +233,12 @@ def test_invalid_concession_is_rejected_without_mutating_backend_state(mutation:
         check_offer(
             turn,
             OpponentOffer.model_validate(offer),
-            OfferAssessment(
-                decision="accept",
-                terms_match_text=True,
-                concession_proofs=[] if mutation == "missing_proof" else [proof],
+            OfferAssessment.model_validate(
+                {
+                    "decision": "accept",
+                    "terms_match_text": True,
+                    "concession_proofs": [] if mutation == "missing_proof" else [proof],
+                }
             ),
         )
     assert turn.model_dump_json() == before
@@ -250,6 +252,7 @@ def test_existing_agreement_cannot_be_silently_changed(mutation: str) -> None:
     old = data["case"]["opponent_strategy"]["steps"][0]["terms"]
     data["snapshot"]["state"].update(stage="agreed", agreement=old)
     turn = TurnRequest.model_validate(data)
+    assert turn.snapshot.state.agreement is not None
     terms = turn.snapshot.state.agreement.model_copy(deep=True)
     if mutation == "value":
         terms.values[0].value = 4800

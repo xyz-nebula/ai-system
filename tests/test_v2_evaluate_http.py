@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -32,13 +33,13 @@ HEADERS = {
 
 
 def validate_contract(kind, value):
-    path = Path(__file__).resolve().parents[1] / "docs/api/v2/evaluation.schema.json"
+    path = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/evaluation.schema.json"
     schema = json.loads(path.read_bytes())
     Draft202012Validator.check_schema(schema)
     Draft202012Validator({**schema, "$ref": f"#/$defs/{kind}"}).validate(value)
 
 
-def evaluate_body():
+def evaluate_body() -> dict[str, Any]:
     # `role` is the model's role (Backend selects it as system_role); the user is opponent_role.
     return {
         "role": "Поставщик",
@@ -1512,7 +1513,7 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
     monkeypatch.setenv("ARENA_QWEN_CHAT_URL", url)
     monkeypatch.setenv("ARENA_QWEN_MODEL", model_id)
     monkeypatch.setenv("ARENA_RETRIEVAL_TIMEOUT_SECONDS", "2")
-    body = evaluate_body()
+    body: dict[str, Any] = evaluate_body()
     if scope == "substantive":
         body = {
             "role": "Генеральный директор",

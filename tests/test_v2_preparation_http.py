@@ -8,7 +8,7 @@ from test_v2_http import configure
 
 from arena_ai.app import create_configured_app
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
 HEADERS = {"Authorization": "Bearer test-token", "X-Arena-Contract-Version": "2.0.0-rc.1"}
 
 

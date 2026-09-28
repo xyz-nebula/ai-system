@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from arena_ai.v2.contracts import Negotiable
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
 
 
 def fixture(name: str) -> dict:
@@ -51,6 +51,7 @@ def test_full_proposal_must_satisfy_hard_and_selected_position_window() -> None:
     )
     proposal = step.terms.model_dump(mode="json")
     value = next(value for value in proposal["values"] if value["term_id"] == rule.term_id)
+    assert rule.maximum is not None
     value["value"] = rule.maximum + 1
     with pytest.raises(ValueError, match="Constraint violated"):
         case.validate_deal(DealTerms.model_validate(proposal), step_id=step.id)

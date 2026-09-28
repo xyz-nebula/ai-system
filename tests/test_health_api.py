@@ -120,9 +120,10 @@ async def test_qwen_readiness_can_disable_tls_verification(
     monkeypatch.setenv("ARENA_QWEN_TLS_VERIFY", "false")
     app = create_configured_app()
 
-    async with app.router.lifespan_context(app), httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
         response = await client.get("/health/ready")
 
     assert response.status_code == 200

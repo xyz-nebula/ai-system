@@ -3,7 +3,7 @@ from pathlib import Path
 
 from arena_ai.v2.contracts import FinishRequest, TurnRequest
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
 
 
 def turn_data() -> dict:

@@ -52,6 +52,7 @@ def assess(turn, *, novelty=None):
                 item["status"] == "accepted" and item["speaker"] == "player"
                 for item in context["history"]
             )
+            assert novelty is not None
             reply = novelty(context)
             if isinstance(reply, httpx.Response):
                 return reply

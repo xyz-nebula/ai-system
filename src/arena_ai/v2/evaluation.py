@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from pydantic import AliasChoices, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
@@ -418,7 +418,7 @@ def map_evidence[T: Contract](value: T, change: Callable[[IndexedEvidence], Inde
             return [walk(element) for element in item]
         return item
 
-    return walk(value)  # type: ignore[return-value]
+    return cast(T, walk(value))
 
 
 def ground_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:

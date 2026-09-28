@@ -13,7 +13,6 @@ LABEL org.opencontainers.image.revision=$ARENA_SOURCE_REVISION
 WORKDIR /opt/arena
 ENV PATH=/opt/arena/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY --from=build /opt/arena/.venv ./.venv
-COPY docs/api/openapi.json ./docs/api/openapi.json
-COPY scripts/check_ai_service.py ./scripts/check_ai_service.py
 USER 10001:10001
-CMD ["uvicorn", "arena_ai.app:app", "--host", "127.0.0.1", "--port", "8000", "--no-access-log"]
+EXPOSE 8000
+CMD ["uvicorn", "arena_ai.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

@@ -72,7 +72,8 @@ def scenario(domain: str, pressure: bool = False) -> tuple[TurnRequest, Opponent
     ) = DOMAINS[domain]
     data = json.loads(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_text()
     )
     case = data["case"]
@@ -155,6 +156,7 @@ def scenario(domain: str, pressure: bool = False) -> tuple[TurnRequest, Opponent
 def test_cross_domain_synthetic_requests_validate(domain):
     turn, offer = scenario(domain)
     turn.snapshot.validate_for_case(turn.case)
+    assert offer.terms is not None
     turn.case.validate_deal(offer.terms, step_id="target")
 
 

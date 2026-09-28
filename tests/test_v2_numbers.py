@@ -25,7 +25,9 @@ def test_nonfinite_wire_numbers_are_rejected(number: str) -> None:
 
 @pytest.mark.parametrize("kind", ["numeric_range", "allowed_values", "linear"])
 def test_exact_numeric_constraints_reject_a_nearby_out_of_bounds_decimal(kind: str) -> None:
-    path = Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+    path = (
+        Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples/supply-turn.request.json"
+    )
     data = json.loads(path.read_text())["case"]
     price = data["negotiables"][0]["id"]
     for rule in data["agreement_policy"]["constraints"]:

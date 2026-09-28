@@ -1,227 +1,91 @@
-# Арена переговоров — AI-сервис
+# ai-system
 
-> Актуальное состояние после повторного запуска 28 сентября: сохранённый
-> `arena-ai-v2-main` снова работает на `http://172.16.34.7:8000`,
-> live/ready проверены; restart policy — `unless-stopped`.
-> Сообщения об освобождении порта ниже описывают промежуточную остановку.
-> Вторую копию на 8000 не запускать. Новые локальные исправления не выложены.
+AI-сервис «Арены переговоров»: управляемый ход AI-оппонента (Guard → Opponent → Validator),
+оценка завершённого диалога (исход, три судьи, тренер) и проверка блока подготовки.
+Вызывается только Backend; модель — внешний LocalAI, методология судей — в Qdrant.
 
-Серверный AI-контур тренажёра переговоров: управляемый ход с Guard и Validator,
-AI-оппонент, три независимых судьи и отдельный Trainer. Backend хранит кейс и снимок
-поединка; Audio Engine отвечает за STT/TTS.
+## Запуск
 
-README описывает деплой на Linux-сервере. Локальный demo и тесты вынесены в
-[отдельный гайд](docs/local-development.md).
+Нужны Docker с Compose и доступный LocalAI с моделью `qwen3.8-9b-q4`.
 
-Для команды, поднимающей свой экземпляр: [пошаговый запуск AI v2](docs/integration/launch-ai-service.md).
-Все актуальные инструкции и границы исторических отчётов собраны в
-[навигации по документации](docs/README.md).
+```bash
+cp .env.example .env        # задать ARENA_SERVICE_TOKEN и ARENA_BIND_IP
+docker compose up -d        # AI + Qdrant + эмбеддинги
+curl http://<ARENA_BIND_IP>:8000/health/ready
+```
 
-Для новой разработки подготовлен
-[единый контракт 2.0.0-rc.1](docs/api/v2/README.md): ответственность команд,
-полные поля, REST/Audio схемы, примеры и правила таймера/границ/replay. Это target
-реализации, одобренный командами по сообщению пользователя. Начата реализация
-v2-моделей, проверок, модельного хода и фиксации полной/частичной сделки и переноса;
-добавлен opt-in HTTP `/v2/turn` с общим бюджетом вызовов.
-28 сентября наш `arena-ai-v2-main` остановлен для передачи запуска команде;
-порт `172.16.34.7:8000` предназначен для нового экземпляра. Старый v1 тоже остановлен.
-[Ограничения HTTP v2](docs/api/v2/runtime.md)
-описаны отдельно. Добавлен `/v2/finish`: фактический исход, проверяемый
-модельный анализ и три независимых судейских слота с обязательным retrieval.
-Добавлен первый Trainer v2 с проверкой Evidence и отдельной смысловой проверкой.
-Добавлен первый HTTP review отдельного блока подготовки по согласованному контракту.
-Живая приёмка Trainer/судей и полный rollout v2 ещё не завершены.
+`docker compose up -d` берёт образ `ghcr.io/xyz-nebula/ai-system:dev` (собирается CI из
+ветки `dev`; для приватного пакета — `docker login ghcr.io`). Собрать локально:
+`docker compose up -d --build`. Другая ветка или коммит: `ARENA_IMAGE_TAG=main`.
 
-Для нового запуска используйте [один Compose-файл](deploy/ai/compose.simple.yaml)
-и [короткий гайд](docs/integration/launch-ai-service.md). LocalAI и RAG оставлены работающими.
-Для управления сохранённым остановленным экземпляром используйте
-[операционный гайд](docs/integration/staging-v2-checklist.md).
-Compose-инструкции ниже предназначены для нового деплоя: не запускать второй
-контейнер на занятом 8000. Для нового v2 Compose-деплоя требуется явно задать
-`ARENA_V2_ENABLED=true` в защищённом env; значение по умолчанию — false.
-Полнота требований и фактические стыки проверены отдельно в
-[аудите всех доступных репозиториев](docs/integration/project-requirements-and-fields-audit.md).
+Qdrant и эмбеддинги доступны только с сервера (`127.0.0.1:6333`, `127.0.0.1:8081`).
+Тома называются `arena-rag_*`, поэтому существующий индекс судей переиспользуется.
+Для пустого Qdrant проиндексируйте методологию (исходные материалы не хранятся в репозитории):
 
-## Серверная схема
+```bash
+uv run python scripts/index_judge_corpus.py --source-root <папка-с-материалами>
+uv run python scripts/index_judge_corpus.py --check-index
+```
 
-| Компонент | Адрес в текущей среде |
+Без индекса судьи возвращают `judge_retrieval_unavailable`, остальные слоты работают.
+
+## Настройки (`.env`)
+
+| Переменная | Назначение |
 | --- | --- |
-| AI API, остановлен 28 сентября; целевой адрес нового запуска | `http://172.16.34.7:8000` |
-| LocalAI Chat Completions | `http://172.16.34.6:8080/v1/chat/completions` |
-| Модель | `qwen3.8-9b-q4` |
-| Qdrant | `http://127.0.0.1:6333` на AI-сервере |
-| Qwen3 Embeddings / TEI | `http://127.0.0.1:8081` на AI-сервере |
+| `ARENA_SERVICE_TOKEN` | Общий с Backend секрет, обязателен |
+| `ARENA_BIND_IP` | IP, на котором слушает порт 8000; для Backend — приватный IP сервера |
+| `ARENA_QWEN_CHAT_URL`, `ARENA_QWEN_MODEL` | Chat Completions LocalAI и модель |
+| `ARENA_QWEN_*_EXTRA_BODY` | Параметры вызова: генератор судьи без thinking (`metadata`), проверяющие — с thinking |
+| `ARENA_EVALUATE_VALIDATION` | `soft` — без модельных проверок `/v2/evaluate`, `strict` — все проверки |
+| `ARENA_QWEN_API_KEY` | Ключ LocalAI, если нужен |
 
-AI работает в Docker внутри выделенной серверной среды. Backend обращается к нему
-по приватной сети; браузер — только к Backend. Публиковать AI или RAG в интернет не нужно.
-На другом сервере замените пользователя, каталоги и приватные адреса.
+## API
 
-## 1. Подготовка сервера
+POST-запросы требуют `Authorization: Bearer <ARENA_SERVICE_TOKEN>` и
+`X-Arena-Contract-Version: 2.0.0-rc.1`. Полные схемы: `/docs` и `/openapi.json`.
 
-Нужны Linux, Git, Python 3 для provision-скрипта, Docker с Compose и право оператора
-запускать Docker. Python-зависимости приложения устанавливаются внутри image.
-Приватный bind IP должен принадлежать интерфейсу сервера, порт 8000 — быть свободен.
+| Маршрут | Что делает |
+| --- | --- |
+| `GET /health/live`, `GET /health/ready` | Процесс жив; LocalAI и модель доступны |
+| `POST /v2/evaluate` | Оценка сохранённого диалога: исход, судьи `hiring`/`negotiation`/`ownership`, тренер |
+| `POST /v2/turn` | Управляемый ход оппонента по снимку поединка |
+| `POST /v2/finish` | Итог поединка по замороженному снимку |
+| `POST /v2/preparation/review` | Обратная связь по одному блоку подготовки |
 
-```bash
-ssh -p 8022 farrahovd234@2.26.27.230
-docker version
-docker compose version
-ip -brief address
-ss -ltn 'sport = :8000'
+Пример `/v2/evaluate`. `role` — роль **модели** (реплики `is_ai: true`), `opponent_role` —
+роль пользователя:
+
+```json
+{
+  "role": "Генеральный директор",
+  "opponent_role": "Менеджер",
+  "case_description": "Переговоры о повышении после пропущенного рабочего дня.",
+  "messages": [
+    {"text": "Предлагаю две недели контроля и KPI 120%.", "is_ai": false},
+    {"text": "Согласен: две недели контроля и KPI 120%.", "is_ai": true}
+  ],
+  "preparations": "Моя цель — согласовать измеримые условия повышения."
+}
 ```
 
-Если AI уже запущен другим оператором, не создавайте второй экземпляр: используйте
-[операционный гайд](docs/integration/server-deployment.md) для текущих release-каталогов.
-Не останавливайте чужой listener ради освобождения порта.
+Ответ всегда HTTP 200 при валидном запросе; каждый слот отдельно `ready` или `failed`
+с `error_code`. `failed` — «оценка недоступна», не проигрыш. Один запрос идёт 30–60 с,
+при нескольких одновременных — дольше: таймаут на стороне Backend не меньше 300 с.
 
-Ниже — **новая установка**. Все дальнейшие команды выполняются на сервере.
-Выберите утверждённую ветку или tag; пример использует `dev`.
-
-```bash
-mkdir -p /home/farrahovd234/arena-ai
-install -d -m 700 /home/farrahovd234/arena-ai/shared
-git clone --branch dev https://github.com/xyz-nebula/ai-system.git \
-  /home/farrahovd234/arena-ai/source
-cd /home/farrahovd234/arena-ai/source
-git rev-parse HEAD
-```
-
-Для закрытого репозитория используйте штатную Git-авторизацию, не токен в URL.
-
-## 2. Модель и retrieval
-
-LocalAI должен быть доступен с AI-сервера, модель — загружена. Этот репозиторий
-не разворачивает и не перенастраивает чужой LocalAI.
-
-Если retrieval-стек уже работает, используйте его без пересоздания. Для новой установки:
+## Разработка
 
 ```bash
-docker compose -f deploy/rag/compose.yaml up -d qdrant embeddings
-docker compose -f deploy/rag/compose.yaml ps
+uv sync --dev
+just check      # ruff, format, ty, pytest
+just run-dev    # локально без Docker, с переменными из .env
 ```
 
-Qdrant и TEI слушают только loopback. Первый запуск TEI скачивает
-`Qwen/Qwen3-Embedding-0.6B`; данные сохраняются в Docker volumes.
-Не выполняйте `down -v` и не запускайте второй стек на тех же портах.
+Живые тесты с LocalAI включаются явно:
+`ARENA_RUN_LIVE_V2=1 uv run pytest tests/test_v2_evaluate_http.py -k live` (нужны
+`ARENA_QWEN_CHAT_URL` и `ARENA_QWEN_MODEL`).
 
-Судьям нужен заполненный проверенный индекс `arena_judge_methodology_v1`.
-Первичная индексация описана в [гайде корпуса](docs/judge-corpus.md):
-исходные методические страницы предоставляются отдельно и не входят в image.
-Существующий актуальный индекс повторно загружать не нужно.
-Без retrieval судьи возвращают failed-слоты, а не demo-вердикты.
+CI (`.github/workflows`): `ci.yml` — lint, format, typecheck, тесты; `docker-publish.yml` —
+образ `ghcr.io/xyz-nebula/ai-system` с тегами ветки, `sha-…`, semver и `latest`.
 
-## 3. Защищённая конфигурация
-
-```bash
-python3 scripts/provision_ai_env.py \
-  --destination /home/farrahovd234/arena-ai/shared/.env \
-  --bind-ip 172.16.34.7
-```
-
-Скрипт создаёт env с правами `0600`, режимом `qwen` и случайным service token.
-Существующий файл не перезаписывает: при обновлении пропустите этот шаг.
-Проверьте конфигурацию в редакторе на сервере по
-[deploy/ai/.env.example](deploy/ai/.env.example).
-
-Основные параметры: `ARENA_BIND_IP`, `ARENA_QWEN_CHAT_URL`, `ARENA_QWEN_MODEL`,
-`ARENA_QDRANT_URL`, `ARENA_EMBEDDINGS_URL`, `ARENA_JUDGE_COLLECTION`.
-В host-network контейнере loopback относится к этой серверной среде.
-Сохраняйте `ARENA_MODEL_MODE=qwen` и сгенерированный `ARENA_SERVICE_TOKEN`.
-
-Service token передавайте только Backend через защищённое хранилище.
-Не публикуйте env, полный `docker inspect` или `compose config`: они содержат секреты.
-Токен не должен попасть в Git, image, чат или браузер; это не пользовательский JWT.
-
-## 4. Сборка и запуск
-
-Из серверного checkout без незакоммиченных изменений:
-
-```bash
-git status --short
-export ARENA_RELEASE_REVISION="$(git rev-parse HEAD)"
-export ARENA_IMAGE="arena-ai:$ARENA_RELEASE_REVISION"
-export ARENA_ENV_FILE=/home/farrahovd234/arena-ai/shared/.env
-docker build --build-arg ARENA_SOURCE_REVISION="$ARENA_RELEASE_REVISION" \
-  -t "$ARENA_IMAGE" .
-docker compose --env-file "$ARENA_ENV_FILE" -f deploy/ai/compose.yaml config --quiet
-docker compose --env-file "$ARENA_ENV_FILE" -f deploy/ai/compose.yaml up -d --no-deps ai
-docker compose --env-file "$ARENA_ENV_FILE" -f deploy/ai/compose.yaml ps
-```
-
-Если `git status` показывает изменения, сначала определите точный состав релиза:
-один commit ID не описывает изменённые исходники.
-Compose запускает только AI, не трогает LocalAI и RAG. Контейнер работает без root,
-с read-only filesystem, лимитами ресурсов и `restart: unless-stopped`.
-Используется Linux host networking и bind только на выбранный приватный IP.
-
-## 5. Проверка деплоя
-
-Подставьте свой bind IP, если он отличается:
-
-```bash
-docker exec arena-ai-ai-1 python scripts/check_ai_service.py \
-  --api-url http://172.16.34.7:8000
-docker exec arena-ai-ai-1 python scripts/check_ai_service.py \
-  --api-url http://172.16.34.7:8000 --live-duel --timeout 900
-```
-
-Первая команда проверяет health, OpenAPI, авторизацию и валидацию без генерации диалога.
-Вторая вызывает настоящую модель: один управляемый ход и finish с тремя судьями и Trainer.
-Токен берётся из окружения контейнера; отчёт не содержит секретов.
-Exit `0` означает успешное прохождение выбранных проверок.
-
-Docker health проверяет процесс; `/health/ready` — gateway и модель, **не RAG**.
-Retrieval подтверждайте проверкой индекса и готовыми живыми судейскими слотами.
-Также проверьте health из контейнера Backend: его `localhost` — не AI-сервер.
-Не повторяйте модельный запрос автоматически после неоднозначного timeout.
-
-## 6. Обновление и откат
-
-Для текущего деплоя с каталогами `releases/` используйте
-[операционный гайд](docs/integration/server-deployment.md), не создавайте параллельный деплой.
-Для новой установки из разделов выше:
-
-1. Запишите предыдущий commit и image tag, сохраните предыдущий image.
-2. В серверном checkout выполните `git pull --ff-only` для выбранной ветки.
-3. Повторите сборку и запуск из раздела 4 с **тем же** защищённым env.
-4. Выполните проверки из раздела 5.
-
-Для отката задайте `ARENA_IMAGE` предыдущим сохранённым tag и повторите
-`up -d --no-deps ai`; при изменениях Compose используйте и предыдущий deployment-файл.
-Обновление может прервать запросы: согласуйте окно без активных поединков.
-Не удаляйте RAG volumes или секреты при обновлении и откате.
-
-Остановка только AI при заданных переменных из раздела 4:
-
-```bash
-docker compose --env-file "$ARENA_ENV_FILE" -f deploy/ai/compose.yaml stop ai
-```
-
-## Интеграция и документация
-
-Turn/finish требуют `Authorization: Bearer <AI service token>`.
-Backend хранит снимок целиком, управляет ходами и таймером, не отдаёт закрытые поля браузеру.
-Audio Engine озвучивает только проверенный ответ.
-
-26 сентября 2026 минимальный серверный turn/finish проверен на реальных Qwen и RAG.
-Это не полная приёмка: стыковка остальных компонентов, экспертная проверка и нагрузка
-шести пользователей — отдельные этапы. Последние локальные исправления v1 прошли
-шесть модельных ходов и отдельный повтор finish с готовыми тремя судьями и Trainer;
-это не свежий полный прогон после последней правки и не подтверждение их деплоя.
-
-- [Единый документ интеграции v2 для всех команд: задачи, маршруты и все поля](docs/integration/unified-integration-guide.md)
-- [Текущее состояние AI: что развёрнуто, проверено и ещё не готово](docs/integration/ai-current-state.md)
-- [Прямой стык Backend ↔ AI: адрес, запросы, ответы и приёмка](docs/integration/backend-ai-v2-guide.md)
-- [Проверка всех репозиториев и практический гайд подключения всего проекта](docs/integration/full-stack-connection-guide.md)
-- [Простая оценка диалога POST /v2/evaluate: запрос, ответ и пример вызова](docs/integration/simple-evaluation-request.md)
-- [Сохранённый остановленный AI: управление и откат](docs/integration/staging-v2-checklist.md)
-- [Подключение существующего v1](docs/integration/team-integration.md)
-- [API-контракт и примеры](docs/api/README.md)
-- [Сценарий вызовов: CaseConfig → turn → snapshot → finish](docs/api/usage-flow.md)
-- [Серверная эксплуатация и SSH-туннель](docs/integration/server-deployment.md)
-- [Корпус судей и индексация](docs/judge-corpus.md)
-- [Локальная разработка и тесты](docs/local-development.md)
-- [Словарь проекта](CONTEXT.md) и [архитектурные решения](docs/adr/)
-- [База знаний команды](https://github.com/xyz-nebula/knowledge-base)
-
-Локальные задачи, черновики и отчёты в `.scratch/` не публикуются в Git.
+Словарь предметной области — [CONTEXT.md](CONTEXT.md), решения — [docs/adr](docs/adr).

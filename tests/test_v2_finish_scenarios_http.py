@@ -20,7 +20,8 @@ def anyio_backend():
 def scenario_body(scenario):
     base = json.loads(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     case, snapshot = base["case"], base["snapshot"]

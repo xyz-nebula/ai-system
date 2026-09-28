@@ -18,7 +18,7 @@ def anyio_backend():
 def feedback_example():
     path = (
         Path(__file__).resolve().parents[1]
-        / "docs/api/v2/examples/finish-with-preparation.response.json"
+        / "tests/fixtures/v2/examples/finish-with-preparation.response.json"
     )
     return json.loads(path.read_bytes())["trainer_feedback"]["feedback"]
 

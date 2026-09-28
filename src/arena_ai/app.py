@@ -598,7 +598,9 @@ def create_app(
     if v2_pipeline is not None:
         from arena_ai.v2.http import install_turn_route
 
-        install_turn_route(app, v2_pipeline, require_service_token, SERVICE_BEARER, active_retrieval)
+        install_turn_route(
+            app, v2_pipeline, require_service_token, SERVICE_BEARER, active_retrieval
+        )
 
     @app.get("/v1/info", response_model=ServiceInfo)
     async def service_info() -> ServiceInfo:

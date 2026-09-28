@@ -15,7 +15,8 @@ def test_validator_assesses_offer_through_model_http_without_mutating_turn() -> 
 
     turn = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_text()
     )
     before = turn.model_dump_json()
@@ -62,7 +63,8 @@ def test_uncertain_assessment_preserves_exact_numeric_offer_on_model_wire() -> N
 
     turn = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_text()
     )
     terms = turn.case.opponent_strategy.steps[0].terms.model_copy(deep=True)
@@ -104,7 +106,8 @@ def test_invalid_or_inconsistent_assessment_fails_closed(content: str) -> None:
 
     turn = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_text()
     )
     offer = OpponentOffer(text="Уточните объём.", terms=None, position_transition=None)
@@ -131,7 +134,8 @@ def test_gateway_failure_never_returns_an_acceptance_or_leaks_details(failure: s
 
     turn = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_text()
     )
     before = turn.model_dump_json()
@@ -163,7 +167,8 @@ def test_complete_json_fence_is_accepted_without_json_repair() -> None:
 
     turn = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     offer = OpponentOffer(text="Уточните объём.", terms=None, position_transition=None)

@@ -14,7 +14,7 @@ def finish_body():
     return json.loads(
         (
             Path(__file__).resolve().parents[1]
-            / "docs/api/v2/examples/finish-with-preparation.request.json"
+            / "tests/fixtures/v2/examples/finish-with-preparation.request.json"
         ).read_bytes()
     )
 
@@ -66,7 +66,7 @@ async def test_finish_openapi_describes_complete_response(monkeypatch):
     validator = Draft202012Validator(
         {"$ref": "#/components/schemas/V2FinishResponse", "components": schema["components"]}
     )
-    examples = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+    examples = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
     assert actual.status_code == 200
     validator.validate(actual.json())
     canonical = json.loads((examples.parent / "contract.schema.json").read_bytes())
@@ -93,7 +93,7 @@ async def test_finish_published_schema_rejects_incompatible_responses(monkeypatc
             schema = (await client.get("/openapi.json")).json()
     example = (
         Path(__file__).resolve().parents[1]
-        / "docs/api/v2/examples/finish-with-preparation.response.json"
+        / "tests/fixtures/v2/examples/finish-with-preparation.response.json"
     )
     payload = json.loads(example.read_bytes())
     if mutation == "extra":
@@ -348,7 +348,7 @@ def anyio_backend():
 @pytest.mark.anyio
 async def test_empty_frozen_round_has_no_invented_agreement_or_analytics(monkeypatch):
     configure(monkeypatch)
-    examples = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+    examples = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
 
     def gateway(request):
         raise AssertionError("An empty conversation must not be sent to a model")
@@ -373,7 +373,7 @@ async def test_empty_frozen_round_has_no_invented_agreement_or_analytics(monkeyp
 @pytest.mark.anyio
 async def test_nonempty_finish_does_not_claim_analysis_is_ready(monkeypatch):
     configure(monkeypatch)
-    examples = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+    examples = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
     async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable_gateway)) as model:
         app = create_configured_app(model)
         async with httpx.AsyncClient(
@@ -413,7 +413,7 @@ async def test_nonempty_finish_does_not_claim_analysis_is_ready(monkeypatch):
 )
 async def test_finish_rejects_invalid_boundary_requests(monkeypatch, change, status, code):
     configure(monkeypatch)
-    examples = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+    examples = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
     body = json.loads((examples / "empty-finish.request.json").read_bytes())
     headers = {
         "Authorization": "Bearer test-token",
@@ -451,7 +451,7 @@ async def test_finish_rejects_invalid_boundary_requests(monkeypatch, change, sta
 @pytest.mark.parametrize("kind", ["agreement", "partial_agreement", "deferred"])
 async def test_finish_preserves_confirmed_result_instead_of_rejudging_it(monkeypatch, kind):
     configure(monkeypatch)
-    examples = Path(__file__).resolve().parents[1] / "docs/api/v2/examples"
+    examples = Path(__file__).resolve().parents[1] / "tests/fixtures/v2/examples"
     body = json.loads((examples / "finish-with-preparation.request.json").read_bytes())
     state = body["snapshot"]["state"]
     if kind == "agreement":

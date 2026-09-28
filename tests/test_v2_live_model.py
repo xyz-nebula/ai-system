@@ -21,7 +21,8 @@ from arena_ai.v2.validator import QwenOfferValidator
 def test_live_commitment_only_turn_records_partial_not_full_agreement():
     base = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     settings = QwenSettings.from_env()
@@ -43,7 +44,8 @@ def test_live_commitment_only_turn_records_partial_not_full_agreement():
 def test_live_new_direct_commitment_allows_matching_offer_with_unambiguous_references():
     base = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     settings = QwenSettings.from_env()
@@ -64,7 +66,8 @@ def test_live_new_direct_commitment_allows_matching_offer_with_unambiguous_refer
 def test_live_paraphrased_old_commitment_cannot_earn_another_concession():
     base = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     settings = QwenSettings.from_env()
@@ -85,7 +88,8 @@ def test_live_paraphrased_old_commitment_cannot_earn_another_concession():
 def test_live_unambiguous_references_do_not_excuse_mismatching_values():
     base = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     data = base.model_dump(mode="python")
@@ -121,7 +125,8 @@ def test_live_http_v2_negotiating_turn_uses_real_model_and_checked_snapshot(monk
     monkeypatch.setenv("ARENA_SERVICE_TOKEN", "synthetic-live-test-token")
     base = TurnRequest.model_validate_json(
         (
-            Path(__file__).resolve().parents[1] / "docs/api/v2/examples/supply-turn.request.json"
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/v2/examples/supply-turn.request.json"
         ).read_bytes()
     )
     settings = QwenSettings.from_env()
