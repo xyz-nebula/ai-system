@@ -9,28 +9,28 @@ AI-сервис «Арены переговоров»: управляемый х
 
 ## Запуск
 
-Нужны Docker с Compose и доступный LocalAI с моделью `qwen3.8-9b-q4`.
+Нужны Docker с Compose и OpenAI-совместимый сервер модели (LocalAI, vLLM и т. п.)
+с Qwen3 8–9B; проверено на LocalAI с `qwen3.8-9b-q4`.
 
 ```bash
-cp .env.example .env        # задать ARENA_SERVICE_TOKEN и ARENA_BIND_IP
-docker compose up -d        # AI + Qdrant + эмбеддинги
-curl http://<ARENA_BIND_IP>:8000/health/ready
+git clone https://github.com/xyz-nebula/ai-system.git && cd ai-system
+cp .env.example .env        # задать ARENA_SERVICE_TOKEN и ARENA_QWEN_CHAT_URL
+docker compose up -d        # AI + Qdrant + эмбеддинги + индекс судей
+curl http://127.0.0.1:8000/health/ready
 ```
 
-`docker compose up -d` берёт образ `ghcr.io/xyz-nebula/ai-system:dev` (собирается CI из
-ветки `dev`; для приватного пакета — `docker login ghcr.io`). Собрать локально:
-`docker compose up -d --build`. Другая ветка или коммит: `ARENA_IMAGE_TAG=main`.
+Образ `ghcr.io/xyz-nebula/ai-system` собирает CI; если скачать его нельзя, `docker compose`
+соберёт его из исходников (`docker compose up -d --build` — всегда из исходников).
 
-Qdrant и эмбеддинги доступны только с сервера (`127.0.0.1:6333`, `127.0.0.1:8081`).
-Тома называются `arena-rag_*`, поэтому существующий индекс судей переиспользуется.
-Для пустого Qdrant проиндексируйте методологию (исходные материалы не хранятся в репозитории):
+Индекс судей заполняется сам: сервис `indexer` загружает в Qdrant фрагменты методологии
+из [`judge_corpus.py`](src/arena_ai/judge_corpus.py) и завершается. При первом старте
+эмбеддинги скачивают модель, индексатор дождётся их. Проверка:
+`docker compose run --rm indexer arena-ai-index --check-index`.
+Сами методические пособия в репозиторий не входят; `arena-ai-index --source-root <папка>`
+сверяет фрагменты с их постраничным переносом, если он у вас есть.
 
-```bash
-uv run python scripts/index_judge_corpus.py --source-root <папка-с-материалами>
-uv run python scripts/index_judge_corpus.py --check-index
-```
-
-Без индекса судьи возвращают `judge_retrieval_unavailable`, остальные слоты работают.
+Для доступа из Backend задайте `ARENA_BIND_IP` — приватный IP сервера. Qdrant и эмбеддинги
+слушают только `127.0.0.1`. Тома называются `arena-rag_*`: существующий индекс сохраняется.
 
 ## Настройки (`.env`)
 
@@ -38,7 +38,7 @@ uv run python scripts/index_judge_corpus.py --check-index
 | --- | --- |
 | `ARENA_SERVICE_TOKEN` | Общий с Backend секрет, обязателен |
 | `ARENA_BIND_IP` | IP, на котором слушает порт 8000; для Backend — приватный IP сервера |
-| `ARENA_QWEN_CHAT_URL`, `ARENA_QWEN_MODEL` | Chat Completions LocalAI и модель |
+| `ARENA_QWEN_CHAT_URL`, `ARENA_QWEN_MODEL` | Chat Completions сервера модели и имя модели |
 | `ARENA_QWEN_*_EXTRA_BODY` | Параметры вызова: генератор судьи без thinking (`metadata`), проверяющие — с thinking |
 | `ARENA_EVALUATE_VALIDATION` | `soft` — без модельных проверок `/v2/evaluate`, `strict` — все проверки |
 | `ARENA_QWEN_API_KEY` | Ключ LocalAI, если нужен |

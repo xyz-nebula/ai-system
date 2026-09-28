@@ -1,5 +1,5 @@
 # AI-сервис «Арены переговоров» с retrieval для судей: `docker compose up -d`.
-# LocalAI внешний (ARENA_QWEN_CHAT_URL в .env); Qdrant и эмбеддинги поднимаются здесь.
+# Сервер модели внешний (ARENA_QWEN_CHAT_URL в .env); Qdrant, эмбеддинги и индекс — здесь.
 name: arena-ai
 
 services:
@@ -15,6 +15,9 @@ services:
       ARENA_EMBEDDINGS_URL: http://embeddings:80
     ports:
       - "${ARENA_BIND_IP:-127.0.0.1}:${ARENA_PORT:-8000}:8000"
+    extra_hosts:
+      # Сервер модели на этой же машине: http://host.docker.internal:<порт>
+      - "host.docker.internal:host-gateway"
     depends_on:
       - qdrant
       - embeddings
@@ -38,6 +41,26 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+  # Заполняет Qdrant фрагментами методологии из кода и завершается;
+  # перезапускается, пока эмбеддинги не готовы (первый старт скачивает модель).
+  indexer:
+    image: ghcr.io/xyz-nebula/ai-system:${ARENA_IMAGE_TAG:-dev}
+    build: .
+    command: ["arena-ai-index"]
+    environment:
+      ARENA_QDRANT_URL: http://qdrant:6333
+      ARENA_EMBEDDINGS_URL: http://embeddings:80
+    depends_on:
+      - qdrant
+      - embeddings
+    restart: on-failure
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
 
   qdrant:
     image: qdrant/qdrant:v1.19.1
