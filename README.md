@@ -93,6 +93,11 @@ CI (`.github/workflows`): `ci.yml` — lint, format, typecheck, тесты; `doc
 
 Словарь предметной области — [CONTEXT.md](CONTEXT.md), решения — [docs/adr](docs/adr).
 
+## Авторы
+
+Команда [xyz-nebula](https://github.com/xyz-nebula) при участии ИИ-агентов
+[Codex](https://github.com/codex) (OpenAI) и [Claude](https://github.com/claude) (Anthropic).
+
 ## Лицензия
 
 [GNU GPL v3](LICENSE).
