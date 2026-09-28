@@ -119,7 +119,7 @@ Content-Type: application/json
 в Backend, а не в этом фрагменте:
 
 ```python
-async with httpx.AsyncClient(timeout=330.0) as client:
+async with httpx.AsyncClient(timeout=360.0) as client:
     response = await client.post(
         f"{ai_base_url.rstrip('/')}/v2/evaluate",
         headers={

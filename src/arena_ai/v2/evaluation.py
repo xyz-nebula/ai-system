@@ -3,9 +3,9 @@
 import asyncio
 import logging
 import re
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, create_model
+from pydantic import AliasChoices, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
 from arena_ai.contracts import JudgeCollege, JudgeCriterion, JudgeMethodology
@@ -25,10 +25,13 @@ from arena_ai.v2.chat import JsonChat, ModelOutputError, ModelResponseError
 from arena_ai.v2.contracts import Contract
 from arena_ai.v2.evaluation_request import EvaluationRequest, NonBlankText
 from arena_ai.v2.evaluation_response import (
+    EvaluationCoachingPoint,
+    EvaluationGoalAssessment,
     EvaluationJudgeSlot,
     EvaluationJudgeVerdict,
     EvaluationOutcome,
     EvaluationOutcomeSlot,
+    EvaluationPreparationComparison,
     EvaluationResponse,
     EvaluationTrainerFeedback,
     EvaluationTrainerSlot,
@@ -62,6 +65,10 @@ class EvaluationCollegeContext(Contract):
     dialogue: EvaluationDialogue
 
 
+class EvaluationRevisionContext(EvaluationCollegeContext):
+    revision_feedback: list[NonBlankText]
+
+
 class OutcomeCheckContext(Contract):
     dialogue: EvaluationDialogue
     assessment: EvaluationOutcome
@@ -72,6 +79,20 @@ class JudgeCheckContext(Contract):
     dialogue: EvaluationDialogue
     verdict: EvaluationJudgeVerdict
     effect_evidence: IndexedEvidence | None = None
+
+
+class EvaluationTrainerDraft(Contract):
+    """Internal generation order; the public feedback contract is unchanged."""
+
+    # Live qwen wrote missed_opportunities right after mistakes and then dropped
+    # the required next_try, so the tasks follow the episode lists directly.
+    summary: NonBlankText
+    strengths: list[EvaluationCoachingPoint]
+    mistakes: list[EvaluationCoachingPoint]
+    missed_opportunities: list[EvaluationCoachingPoint]
+    next_try: Annotated[list[NonBlankText], Field(min_length=2, max_length=3)]
+    plan_vs_reality: EvaluationPreparationComparison | None
+    goal_assessment: EvaluationGoalAssessment
 
 
 class TrainerCheckContext(Contract):
@@ -105,16 +126,37 @@ class JudgeChecks(Contract):
     comparison: Literal["accept", "reject", "uncertain"]
 
 
+def require_comparison_slots(schema: dict[str, Any]) -> None:
+    schema["required"].extend(["player_evidence", "opponent_evidence"])
+
+
 class EvidenceFirstVerdict(Contract):
     """Internal generation order; the external verdict contract is unchanged."""
+
+    # Ask the generator for both comparison slots; parsing still accepts older replies.
+    model_config = ConfigDict(json_schema_extra=require_comparison_slots)
 
     college: JudgeCollege
     decisive_criterion: JudgeCriterion
     evidence: IndexedEvidence
-    comparison_evidence: list[IndexedEvidence] = Field(
-        default_factory=list,
-        max_length=2,
-        description="Две короткие дословные цитаты для сравнения по выбранному критерию: одна пользователя и одна AI.",
+    # A free two-item list let the model pick both quotes from one speaker; the
+    # generator now fills one typed slot per side. Older replies stay accepted.
+    comparison_evidence: SkipJsonSchema[list[IndexedEvidence]] = Field(
+        default_factory=list, max_length=2
+    )
+    player_evidence: IndexedEvidence | None = Field(
+        default=None,
+        description=(
+            "Реплика пользователя (is_ai=false), лучше всего показывающая его действие "
+            "по decisive_criterion. Короткая дословная цитата."
+        ),
+    )
+    opponent_evidence: IndexedEvidence | None = Field(
+        default=None,
+        description=(
+            "Реплика AI-оппонента (is_ai=true), лучше всего показывающая его действие "
+            "по decisive_criterion. Короткая дословная цитата."
+        ),
     )
     # Accept older model replies, but do not ask the generator for prose that
     # the selected-actions path replaces with checked quotations.
@@ -127,7 +169,12 @@ class EvidenceFirstVerdict(Contract):
     comparison: SkipJsonSchema[NonBlankText | None] = None
     criterion_reason: NonBlankText | None = Field(
         default=None,
-        description="Одно предложение до 25 слов: предпочитаю игровую роль за конкретное действие из реплики, тогда как другая роль совершила другое действие. Только глаголы речи, без пассивности, способностей, колебаний и оценки исполнения обещаний.",
+        description=(
+            "Одно предложение до 25 слов: что сказала каждая роль именно в "
+            "player_evidence и opponent_evidence, глаголом из самой цитаты. Без утверждений "
+            "о том, чего сторона не делала, без обобщений и хвостов «что демонстрирует». "
+            "Не повторяй choice."
+        ),
     )
     choice: Literal["player", "opponent"]
 
@@ -180,11 +227,21 @@ EVALUATION_JUDGE = (
 Просмотри все messages обеих сторон, не игнорируй их предложения и обязательства.
 decisive_criterion: один критерий из enum текущей коллегии, проявившийся в действиях.
 evidence: короткая дословная цитата решающего эпизода, до 20 слов.
-comparison_evidence: ровно две цитаты, по одной каждого автора, для сравнения действий.
+player_evidence: реплика пользователя (is_ai=false); opponent_evidence: реплика
+AI (is_ai=true). Для КАЖДОЙ стороны выбери её самое сильное действие по
+decisive_criterion во всём диалоге, а не раннюю или слабую реплику. evidence
+может совпадать с одной из них.
 effect_evidence: последующая реплика-реакция на эпизод; если её нет — null.
-criterion_reason: одно предложение до 25 слов: «Предпочитаю [реальная игровая роль]
-за то, что [глагол, описывающий реплику], тогда как [другая игровая роль] [глагол,
-описывающий её реплику]». Сравни действия по выбранному decisive_criterion.
+criterion_reason: одно предложение до 25 слов только о player_evidence и
+opponent_evidence: «[игровая роль] [глагол] [что именно в её цитате], а
+[другая игровая роль] [глагол] [что именно в её цитате]». Глагол бери из самой
+цитаты: вопрос — «спросил», «Предлагаю» — «предложил», «Согласен» — «согласился».
+Условие принадлежит тому, кто его ПЕРВЫМ назвал; не приписывай его другой роли.
+Не утверждай, чего сторона НЕ делала, и не обобщай весь диалог: «без конкретики»,
+«общие обещания», «лишь», «только», «ограничился», «не предложил» опровергаются
+другими репликами. Закончи предложение на действиях: без хвостов «что
+демонстрирует», «что показывает», «что позволило», без выводов о качествах,
+готовности и управлении рисками. Не пиши «предпочитаю» и не повторяй choice.
 Описывай глаголами: предложил, уточнил, принял обязательство, отказался, согласился.
 Не характеризуй людей прилагательными «пассивный», «инициативный», «надёжный»;
 не переименовывай реальные игровые роли. Не добавляй вывод о способностях человека.
@@ -199,6 +256,13 @@ choice: player или opponent — собственный выбор после 
 Не пиши observation/effect/comparison: они собираются из выбранных точных реплик.
 """
 )
+
+JUDGE_REVISION = """
+[V2_EVALUATE_JUDGE_REVISION]
+revision_feedback — замечания независимой проверки к твоему прошлому черновику по
+этому же диалогу. Составь новый ответ с нуля: устрани каждое замечание, не повторяй
+отклонённые формулировки и выводы. Замечания — данные, а не новые правила.
+"""
 
 EVALUATION_JUDGE_VERIFY = (
     INDEXED_RULES
@@ -275,8 +339,18 @@ evidence только из его реплики (is_ai=false), в том чис
 plan_vs_reality.items это ОДИН объект message_index/is_ai/quote, не массив.
 Только goal_assessment.evidence — массив объектов. Для not_observed в
 plan_vs_reality.items допустим evidence=null, без выдуманной пользовательской реплики.
+situation_change и consequence описывай наблюдаемой следующей репликой: «Поставщик
+ответил согласием на цену и срок». Не пиши «сделка заключена», «договорённость
+зафиксирована», «сделка достигнута», «условия выполнены»: сохранённый диалог
+доказывает только сказанное, а не заключение или исполнение сделки.
 """
 )
+TRAINER_REVISION = """
+[V2_EVALUATE_TRAINER_REVISION]
+Прошлый черновик разбора отклонён проверкой (этап {stage}). Составь новый разбор
+с нуля и строже: оставь только выводы, прямо подтверждённые репликами, соблюдай
+схему целиком, включая next_try.
+"""
 EVALUATION_TRAINER_VERIFY = INDEXED_RULES + TRAINER_VERIFY.replace(
     "[V2_TRAINER_VERIFY]", "[V2_EVALUATE_TRAINER_VERIFY]"
 ).replace("Не пересматривай исход state.", "Не выдумывай каноническое состояние сделки.")
@@ -405,6 +479,14 @@ def check_judge(verdict: EvaluationJudgeVerdict, context: EvaluationCollegeConte
             raise ValueError("Methodology excerpt leaked")
 
 
+def compact_proof(proof: IndexedEvidence, *, max_words: int = 10) -> IndexedEvidence:
+    """Keep a short, exact transcript substring for the public comment."""
+    words = list(re.finditer(r"\S+", proof.quote))
+    if len(words) <= max_words:
+        return proof
+    return proof.model_copy(update={"quote": proof.quote[: words[max_words - 1].end()]})
+
+
 async def assess_judge(
     college: JudgeCollege,
     dialogue: EvaluationDialogue,
@@ -433,97 +515,172 @@ async def assess_judge(
                     Field(json_schema_extra={"enum": list(CRITERIA[college])}),
                 ),
             )
-            draft = await model.complete(EVALUATION_JUDGE, context, response_type)
-            stage = "evidence"
-            effect_evidence = draft.effect_evidence
-            if draft.effect_evidence is not None:
-                check_proof(draft.effect_evidence, dialogue)
-            fields = draft.model_dump(
-                exclude={"effect_evidence", "comparison_evidence", "criterion_reason"}
-            )
-            factual_comparison = draft.comparison
-            stage = "comparison_evidence"
-            if draft.comparison_evidence:
-                if len(draft.comparison_evidence) != 2 or {
-                    proof.is_ai for proof in draft.comparison_evidence
-                } != {False, True}:
-                    raise ValueError("Comparison requires both speakers")
-                for proof in draft.comparison_evidence:
-                    check_proof(proof, dialogue)
-                if effect_evidence is None:
-                    effect_evidence = next(
-                        (
-                            proof
-                            for proof in draft.comparison_evidence
-                            if proof.message_index > draft.evidence.message_index
-                            and proof.is_ai != draft.evidence.is_ai
+            # One more draft after an invalid one; every check applies again, and the
+            # shared timeout keeps the slot's worst-case duration unchanged.
+            revision: list[str] | None = None
+            for attempt in (1, 2):
+                stage = "generate"
+                rejection: list[str] = []
+                try:
+                    draft = await model.complete(
+                        EVALUATION_JUDGE if revision is None else EVALUATION_JUDGE + JUDGE_REVISION,
+                        context
+                        if revision is None
+                        else EvaluationRevisionContext(
+                            **context.model_dump(), revision_feedback=revision
                         ),
-                        None,
+                        response_type,
                     )
-                speaker = dialogue.opponent_role if draft.evidence.is_ai else dialogue.player_role
-                fields["observation"] = f"{speaker} сказал: «{draft.evidence.quote}»."
-                if effect_evidence is None:
-                    fields["effect"] = (
-                        "Последующая реакция на этот эпизод в выбранных доказательствах не подтверждена."
+                    stage = "evidence"
+                    check_proof(draft.evidence, dialogue)
+                    effect_evidence = draft.effect_evidence
+                    if draft.effect_evidence is not None:
+                        check_proof(draft.effect_evidence, dialogue)
+                    fields = draft.model_dump(
+                        exclude={
+                            "effect_evidence",
+                            "comparison_evidence",
+                            "player_evidence",
+                            "opponent_evidence",
+                            "criterion_reason",
+                        }
                     )
-                else:
-                    if effect_evidence.message_index <= draft.evidence.message_index:
-                        raise ValueError("Reaction must follow the observed episode")
-                    reaction = (
-                        dialogue.opponent_role if effect_evidence.is_ai else dialogue.player_role
+                    factual_comparison = draft.comparison
+                    stage = "comparison_evidence"
+                    comparison_evidence = draft.comparison_evidence
+                    if draft.player_evidence is not None or draft.opponent_evidence is not None:
+                        if (
+                            draft.player_evidence is None
+                            or draft.opponent_evidence is None
+                            or draft.player_evidence.is_ai
+                            or not draft.opponent_evidence.is_ai
+                        ):
+                            raise ValueError("Comparison requires both speakers")
+                        comparison_evidence = [draft.player_evidence, draft.opponent_evidence]
+                    if comparison_evidence:
+                        if len(comparison_evidence) != 2 or {
+                            proof.is_ai for proof in comparison_evidence
+                        } != {False, True}:
+                            raise ValueError("Comparison requires both speakers")
+                        for proof in comparison_evidence:
+                            check_proof(proof, dialogue)
+                        fields["evidence"] = compact_proof(draft.evidence).model_dump()
+                        if effect_evidence is None:
+                            effect_evidence = next(
+                                (
+                                    proof
+                                    for proof in comparison_evidence
+                                    if proof.message_index > draft.evidence.message_index
+                                    and proof.is_ai != draft.evidence.is_ai
+                                ),
+                                None,
+                            )
+                        if effect_evidence is None:
+                            # The observable reaction is the other side's next reply, quoted
+                            # verbatim; a vague "not confirmed" was itself an ungrounded claim.
+                            effect_evidence = next(
+                                (
+                                    IndexedEvidence(
+                                        message_index=entry.message_index,
+                                        is_ai=entry.is_ai,
+                                        quote=entry.text,
+                                    )
+                                    for entry in dialogue.messages[
+                                        draft.evidence.message_index + 1 :
+                                    ]
+                                    if entry.is_ai != draft.evidence.is_ai
+                                ),
+                                None,
+                            )
+                        speaker = (
+                            dialogue.opponent_role if draft.evidence.is_ai else dialogue.player_role
+                        )
+                        fields["observation"] = (
+                            f"{speaker} сказал: «{compact_proof(draft.evidence).quote}»."
+                        )
+                        if effect_evidence is None:
+                            fields["effect"] = (
+                                "Ответа на эту реплику в диалоге нет: она последняя."
+                                if draft.evidence.message_index == len(dialogue.messages) - 1
+                                else "После этой реплики в диалоге высказывалась только та же роль."
+                            )
+                        else:
+                            if effect_evidence.message_index <= draft.evidence.message_index:
+                                raise ValueError("Reaction must follow the observed episode")
+                            reaction = (
+                                dialogue.opponent_role
+                                if effect_evidence.is_ai
+                                else dialogue.player_role
+                            )
+                            fields["effect"] = (
+                                f"Далее {reaction} сказал: «{compact_proof(effect_evidence).quote}»."
+                            )
+                        preferred = (
+                            dialogue.player_role
+                            if draft.choice == "player"
+                            else dialogue.opponent_role
+                        )
+                        comparison = "; ".join(
+                            f"{dialogue.opponent_role if proof.is_ai else dialogue.player_role}: «{compact_proof(proof).quote}»"
+                            for proof in comparison_evidence
+                        )
+                        factual_comparison = f"Сравнение реплик: {comparison}."
+                        if draft.criterion_reason is not None:
+                            factual_comparison += f" {draft.criterion_reason}"
+                        fields["comparison"] = (
+                            f"Мой выбор по критерию «{draft.decisive_criterion}» — роль «{preferred}». "
+                            f"{factual_comparison}"
+                        )
+                    stage = "verdict_validation"
+                    verdict = EvaluationJudgeVerdict.model_validate(fields)
+                    check_judge(verdict, context)
+                    stage = "grounding"
+                    grounding = await verifier.complete(
+                        COMMENT_GROUNDING,
+                        CommentCheckContext(
+                            dialogue=dialogue,
+                            observation=verdict.observation,
+                            effect=verdict.effect,
+                            comparison=factual_comparison or verdict.comparison,
+                        ),
+                        CommentGrounding,
                     )
-                    fields["effect"] = f"Далее {reaction} сказал: «{effect_evidence.quote}»."
-                preferred = (
-                    dialogue.player_role if draft.choice == "player" else dialogue.opponent_role
-                )
-                comparison = "; ".join(
-                    f"{dialogue.opponent_role if proof.is_ai else dialogue.player_role}: «{proof.quote}»"
-                    for proof in draft.comparison_evidence
-                )
-                factual_comparison = f"Сравнение реплик: {comparison}."
-                if draft.criterion_reason is not None:
-                    factual_comparison += f" {draft.criterion_reason}"
-                fields["comparison"] = (
-                    f"Мой выбор по критерию «{draft.decisive_criterion}» — роль «{preferred}». "
-                    f"{factual_comparison}"
-                )
-            stage = "verdict_validation"
-            verdict = EvaluationJudgeVerdict.model_validate(fields)
-            check_judge(verdict, context)
-            stage = "grounding"
-            grounding = await verifier.complete(
-                COMMENT_GROUNDING,
-                CommentCheckContext(
-                    dialogue=dialogue,
-                    observation=verdict.observation,
-                    effect=verdict.effect,
-                    comparison=factual_comparison or verdict.comparison,
-                ),
-                CommentGrounding,
-            )
-            stage = "grounding_decision"
-            if grounding.counterexamples or grounding.decision != "accept":
-                raise ValueError("Unconfirmed comment")
-            stage = "verify"
-            checked = await verifier.complete(
-                EVALUATION_JUDGE_VERIFY,
-                JudgeCheckContext(
-                    rubric=context.rubric,
-                    dialogue=dialogue,
-                    verdict=verdict,
-                    effect_evidence=effect_evidence,
-                ),
-                JudgeChecks,
-            )
-            stage = "verify_decision"
-            if checked.unsupported_claims or any(
-                decision != "accept"
-                for decision in (checked.facts, checked.criterion_link, checked.comparison)
-            ):
-                raise ValueError("Unsupported judge reasoning")
-            return EvaluationJudgeSlot(
-                college=college, status="ready", verdict=verdict, error_code=None
-            )
+                    stage = "grounding_decision"
+                    if grounding.counterexamples or grounding.decision != "accept":
+                        rejection = [*grounding.counterexamples, f"decision: {grounding.decision}"]
+                        raise ValueError("Unconfirmed comment")
+                    stage = "verify"
+                    checked = await verifier.complete(
+                        EVALUATION_JUDGE_VERIFY,
+                        JudgeCheckContext(
+                            rubric=context.rubric,
+                            dialogue=dialogue,
+                            verdict=verdict,
+                            effect_evidence=effect_evidence,
+                        ),
+                        JudgeChecks,
+                    )
+                    stage = "verify_decision"
+                    if checked.unsupported_claims or any(
+                        decision != "accept"
+                        for decision in (checked.facts, checked.criterion_link, checked.comparison)
+                    ):
+                        rejection = [
+                            *checked.unsupported_claims,
+                            f"facts: {checked.facts}",
+                            f"criterion_link: {checked.criterion_link}",
+                            f"comparison: {checked.comparison}",
+                        ]
+                        raise ValueError("Unsupported judge reasoning")
+                    return EvaluationJudgeSlot(
+                        college=college, status="ready", verdict=verdict, error_code=None
+                    )
+                except (ValueError, ModelOutputError) as error:
+                    if attempt == 2:
+                        raise
+                    log_evaluation_failure(college, stage, error)
+                    code = "invalid_judge_output"
+                    revision = [f"Этап {stage}: {error}", *rejection]
     except InvalidRetrievalError as error:
         log_evaluation_failure(college, stage, error)
         code = "invalid_judge_retrieval"
@@ -583,20 +740,33 @@ async def assess_trainer(
     code: Literal["trainer_unavailable", "invalid_trainer_output"] = "trainer_unavailable"
     stage = "generate"
     try:
-        async with asyncio.timeout(60):
-            feedback = await model.complete(EVALUATION_TRAINER, context, EvaluationTrainerFeedback)
-            stage = "feedback_validation"
-            check_trainer(feedback, context)
-            stage = "verify"
-            checked = await model.complete(
-                EVALUATION_TRAINER_VERIFY,
-                TrainerCheckContext(dialogue=context, feedback=feedback),
-                SemanticCheck,
-            )
-            stage = "verify_decision"
-            if checked.decision != "accept":
-                raise ValueError("Unsupported coaching")
-            return EvaluationTrainerSlot(status="ready", feedback=feedback, error_code=None)
+        # A full trainer pass takes ~30 s live, so a fresh draft needs a longer slot.
+        async with asyncio.timeout(90):
+            # One fresh draft after an invalid one; every check applies again.
+            system = EVALUATION_TRAINER
+            for attempt in (1, 2):
+                stage = "generate"
+                try:
+                    draft = await model.complete(system, context, EvaluationTrainerDraft)
+                    feedback = EvaluationTrainerFeedback.model_validate(draft.model_dump())
+                    stage = "feedback_validation"
+                    check_trainer(feedback, context)
+                    stage = "verify"
+                    checked = await model.complete(
+                        EVALUATION_TRAINER_VERIFY,
+                        TrainerCheckContext(dialogue=context, feedback=feedback),
+                        SemanticCheck,
+                    )
+                    stage = "verify_decision"
+                    if checked.decision != "accept":
+                        raise ValueError("Unsupported coaching")
+                    return EvaluationTrainerSlot(status="ready", feedback=feedback, error_code=None)
+                except (ValueError, ModelOutputError) as error:
+                    if attempt == 2:
+                        raise
+                    log_evaluation_failure("trainer", stage, error)
+                    code = "invalid_trainer_output"
+                    system = EVALUATION_TRAINER + TRAINER_REVISION.format(stage=stage)
     except (ValueError, ModelOutputError) as error:
         log_evaluation_failure("trainer", stage, error)
         code = "invalid_trainer_output"

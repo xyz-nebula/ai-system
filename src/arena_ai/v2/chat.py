@@ -1,12 +1,15 @@
 """Exact JSON transport shared by v2 model roles, isolated from v1 parsing."""
 
 import json
+import re
 
 import httpx
 
 from arena_ai.qwen import JSON_FENCE
 from arena_ai.v2.budget import current_budget
 from arena_ai.v2.contracts import Contract
+
+JSON_BLOCK = re.compile(r"```json[ \t]*\r?\n(.*?)\r?\n```", re.DOTALL)
 
 
 class ModelResponseError(RuntimeError):
@@ -77,6 +80,12 @@ class JsonChat:
             fenced = JSON_FENCE.fullmatch(content.strip())
             if fenced is not None:
                 content = fenced.group("json")
+            else:
+                # Reasoning-mode replies may explain the single answer after it;
+                # several fenced answers stay ambiguous and fail the contract.
+                blocks = JSON_BLOCK.findall(content)
+                if len(blocks) == 1:
+                    content = blocks[0]
             return response_type.model_validate_json(content)
         except httpx.HTTPError:
             raise ModelResponseError("Model JSON response unavailable") from None

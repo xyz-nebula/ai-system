@@ -109,7 +109,7 @@ curl --request POST "$AI_BASE_URL/v2/evaluate" \
   --header "X-Arena-Contract-Version: $AI_CONTRACT_VERSION" \
   --header 'Content-Type: application/json' \
   --data-binary @evaluation-request.json \
-  --connect-timeout 5 --max-time 330
+  --connect-timeout 5 --max-time 360
 ```
 
 Не применять curl --verbose и не логировать секреты. Не повторять модельный запрос
@@ -162,7 +162,7 @@ Frontend статусы; failed не означает проигрыш, ноль
 - HTTP 200 + failed: отдельная модельная/проверочная ошибка слота, не транспортный сбой.
 - Обрыв/timeout: результат неизвестен; AI stateless и не дедуплицирует вызовы.
 
-Полный evaluate может занимать около 300 секунд. Текущий 20-секундный UI timeout
+Полный evaluate может занимать до ~330 секунд. Текущий 20-секундный UI timeout
 не подходит для синхронного ожидания. Рекомендуется задача Backend с сохранённым
 processing/result и отдельным чтением результата. У AI нет готового job/poll API:
 этот слой и маршруты для Frontend реализует Backend и согласует с ним.

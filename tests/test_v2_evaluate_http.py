@@ -10,6 +10,14 @@ from test_judge_retrieval_api import RetrievalGateway
 from test_v2_http import configure
 
 from arena_ai.app import create_configured_app
+from arena_ai.v2.chat import JsonChat
+from arena_ai.v2.evaluation import (
+    COMMENT_GROUNDING,
+    CommentCheckContext,
+    CommentGrounding,
+    EvaluationDialogue,
+    IndexedMessage,
+)
 
 
 @pytest.fixture
@@ -247,6 +255,186 @@ async def test_judge_facts_are_grounded_in_selected_actions_not_generated_person
 
 
 @pytest.mark.anyio
+async def test_long_exact_evidence_is_compacted_without_losing_proof(monkeypatch):
+    player_text = (
+        "Предлагаю цену 100 рублей и поставку в пятницу. " + "Уточняю дополнительные детали. " * 45
+    ).strip()
+    opponent_text = (
+        "Согласен на цену 100 рублей и поставку в пятницу. " + "Принимаю указанные условия. " * 45
+    ).strip()
+    body = evaluate_body()
+    body["messages"] = [
+        {"text": player_text, "is_ai": False},
+        {"text": opponent_text, "is_ai": True},
+    ]
+    proofs = [
+        {"message_index": 0, "is_ai": False, "quote": player_text},
+        {"message_index": 1, "is_ai": True, "quote": opponent_text},
+    ]
+
+    def gateway(req):
+        system = json.loads(req.content)["messages"][0]["content"]
+        context = json.loads(json.loads(req.content)["messages"][1]["content"])
+        if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            return reply_json(verifier_reply(system))
+        if "[V2_EVALUATE_JUDGE]" in system:
+            return reply_json(
+                {
+                    **judge_example(context["college"]),
+                    "evidence": proofs[0],
+                    "comparison_evidence": proofs,
+                    "effect_evidence": proofs[1],
+                    "criterion_reason": (
+                        "Предпочитаю Покупателя за то, что он назвал цену и срок, "
+                        "тогда как Поставщик согласился на них."
+                    ),
+                }
+            )
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway, body=body)).json()
+    for slot in result["judge_verdicts"]:
+        assert slot["status"] == "ready", slot
+        verdict = slot["verdict"]
+        assert verdict["evidence"]["quote"] in player_text
+        assert len(verdict["evidence"]["quote"].split()) <= 20
+        assert (
+            len(
+                (
+                    verdict["decisive_criterion"]
+                    + " "
+                    + verdict["evidence"]["quote"]
+                    + " "
+                    + verdict["observation"]
+                    + " "
+                    + verdict["effect"]
+                    + " "
+                    + verdict["comparison"]
+                ).split()
+            )
+            <= 120
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(
+    os.environ.get("ARENA_RUN_LIVE_V2") != "1", reason="Explicit live opt-in required"
+)
+async def test_live_grounding_accepts_supported_action_comparison():
+    dialogue = EvaluationDialogue(
+        player_role="Покупатель",
+        opponent_role="Поставщик",
+        shared_context="Обсуждение цены и срока поставки.",
+        messages=[
+            IndexedMessage(
+                message_index=0,
+                is_ai=False,
+                text="Предлагаю цену 100 рублей и поставку в пятницу.",
+            ),
+            IndexedMessage(
+                message_index=1,
+                is_ai=True,
+                text="Согласен на 100 рублей и поставку в пятницу.",
+            ),
+        ],
+    )
+    context = CommentCheckContext(
+        dialogue=dialogue,
+        observation="Покупатель сказал: «Предлагаю цену 100 рублей и поставку в пятницу.».",
+        effect="Далее Поставщик сказал: «Согласен на 100 рублей и поставку в пятницу.».",
+        comparison=(
+            "Сравнение реплик: Покупатель: «Предлагаю цену 100 рублей и поставку в пятницу.»; "
+            "Поставщик: «Согласен на 100 рублей и поставку в пятницу.». "
+            "Покупатель предложил цену и срок, Поставщик согласился на них."
+        ),
+    )
+    async with httpx.AsyncClient(timeout=20) as http:
+        chat = JsonChat(
+            http,
+            chat_url=os.environ["ARENA_QWEN_CHAT_URL"],
+            model=os.environ["ARENA_QWEN_MODEL"],
+            extra_body={"metadata": {"enable_thinking": "false"}, "temperature": 0},
+        )
+        result = await chat.complete(COMMENT_GROUNDING, context, CommentGrounding)
+    assert result.decision == "accept" and not result.counterexamples, result
+
+
+@pytest.mark.anyio
+async def test_rejected_judge_draft_gets_one_fully_checked_redraft_with_feedback(monkeypatch):
+    rejected = "Покупатель предложил условия, что демонстрирует управление рисками."
+    revised = "Покупатель предложил цену и срок, а Поставщик согласился на них."
+    claim = "что демонстрирует управление рисками"
+    feedback = []
+
+    def gateway(req):
+        messages = json.loads(req.content)["messages"]
+        system = messages[0]["content"]
+        context = json.loads(messages[1]["content"])
+        if "[V2_EVALUATE_JUDGE_VERIFY]" in system:
+            if rejected in context["verdict"]["comparison"]:
+                return reply_json(
+                    {
+                        "unsupported_claims": [claim],
+                        "facts": "accept",
+                        "criterion_link": "reject",
+                        "comparison": "accept",
+                    }
+                )
+            return reply_json(verifier_reply(system))
+        if "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            return reply_json(verifier_reply(system))
+        if "[V2_EVALUATE_JUDGE]" in system:
+            redraft = "[V2_EVALUATE_JUDGE_REVISION]" in system
+            if redraft:
+                feedback.append(context["revision_feedback"])
+            return reply_json(
+                {
+                    **judge_example(context["college"]),
+                    "comparison_evidence": outcome_example()["evidence"],
+                    "criterion_reason": revised if redraft else rejected,
+                }
+            )
+        return httpx.Response(503)
+
+    response = await send_evaluation(monkeypatch, gateway)
+    assert rejected not in response.text
+    for slot in response.json()["judge_verdicts"]:
+        assert slot["status"] == "ready", slot
+        assert revised in slot["verdict"]["comparison"]
+    assert len(feedback) == 3
+    assert all(claim in items and "criterion_link: reject" in items for items in feedback)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("blocks", [1, 2])
+async def test_reasoning_verifier_explanation_after_one_json_block_is_not_a_format_error(
+    monkeypatch, blocks
+):
+    # Live qwen verifiers in reasoning mode append prose after the fenced JSON answer.
+    def fenced(value):
+        return f"```json\n{json.dumps(value, ensure_ascii=False)}\n```"
+
+    def gateway(req):
+        messages = json.loads(req.content)["messages"]
+        system = messages[0]["content"]
+        context = json.loads(messages[1]["content"])
+        if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
+            reply = verifier_reply(system)
+            content = "\n\n".join(
+                [*[fenced(reply)] * blocks, "**Обоснование:** утверждения подтверждены."]
+            )
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        if "[V2_EVALUATE_JUDGE]" in system:
+            return reply_json(judge_example(context["college"]))
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway)).json()
+    for slot in result["judge_verdicts"]:
+        # Two answers are ambiguous: never pick one of them.
+        assert slot["status"] == ("ready" if blocks == 1 else "failed"), slot
+
+
+@pytest.mark.anyio
 async def test_each_college_gets_only_its_own_criteria_in_the_generation_contract(monkeypatch):
     criteria = {
         "hiring": [
@@ -298,7 +486,7 @@ async def test_generator_selects_actions_without_unused_free_comment_fields(monk
         if "VERIFY]" in system or "[V2_EVALUATE_COMMENT_GROUNDING]" in system:
             return reply_json(verifier_reply(system))
         if "[V2_EVALUATE_JUDGE]" in system:
-            schema = json.loads(system[system.index('{"'):])
+            schema = json.loads(system[system.index('{"') :])
             if {"observation", "effect", "comparison"} & schema["properties"].keys():
                 return httpx.Response(503)
             return reply_json(
@@ -527,9 +715,14 @@ async def test_unconfirmed_comment_is_not_published_even_when_college_check_acce
 @pytest.mark.anyio
 @pytest.mark.parametrize("fault", ["unavailable", "format"])
 async def test_comment_check_failure_does_not_discard_other_assessments(monkeypatch, fault):
+    # A transport failure is not redrafted; an invalid check reply fails both hiring drafts.
     replies = iter(
         [
-            httpx.Response(503) if fault == "unavailable" else reply_json({"decision": "accept"}),
+            *(
+                [httpx.Response(503)]
+                if fault == "unavailable"
+                else [reply_json({"decision": "accept"})] * 2
+            ),
             reply_json({"counterexamples": [], "decision": "accept"}),
             reply_json({"counterexamples": [], "decision": "accept"}),
         ]
@@ -855,6 +1048,52 @@ async def test_invalid_or_unverified_slot_is_not_published_and_other_slots_survi
 
 
 @pytest.mark.anyio
+async def test_trainer_is_asked_for_next_tasks_right_after_the_episode_lists(monkeypatch):
+    # Live qwen dropped the required next_try after writing missed_opportunities
+    # next to mistakes; the generation schema now keeps them adjacent.
+    def gateway(req):
+        system = json.loads(req.content)["messages"][0]["content"]
+        if "[V2_EVALUATE_TRAINER_VERIFY]" in system:
+            return reply_json({"decision": "accept"})
+        if "[V2_EVALUATE_TRAINER]" in system:
+            order = list(json.loads(system[system.index('{"') :])["properties"])
+            if order.index("next_try") != order.index("missed_opportunities") + 1:
+                return httpx.Response(503)
+            return reply_json(trainer_example())
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway)).json()["trainer_feedback"]
+    assert result == {"status": "ready", "feedback": trainer_example(), "error_code": None}
+    validate_contract("EvaluationTrainerSlot", result)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("second", ["accept", "reject"])
+async def test_rejected_trainer_draft_gets_one_fully_checked_redraft(monkeypatch, second):
+    drafts = []
+
+    def gateway(req):
+        system = json.loads(req.content)["messages"][0]["content"]
+        if "[V2_EVALUATE_TRAINER_VERIFY]" in system:
+            return reply_json({"decision": "reject" if len(drafts) == 1 else second})
+        if "[V2_EVALUATE_TRAINER]" in system:
+            drafts.append("[V2_EVALUATE_TRAINER_REVISION]" in system)
+            return reply_json(trainer_example())
+        return httpx.Response(503)
+
+    result = (await send_evaluation(monkeypatch, gateway)).json()["trainer_feedback"]
+    assert drafts == [False, True]
+    if second == "accept":
+        assert result == {"status": "ready", "feedback": trainer_example(), "error_code": None}
+    else:
+        assert result == {
+            "status": "failed",
+            "feedback": None,
+            "error_code": "invalid_trainer_output",
+        }
+
+
+@pytest.mark.anyio
 async def test_trainer_without_preparation_does_not_invent_a_personal_plan(monkeypatch):
     body = evaluate_body()
     del body["preparations"]
@@ -1061,7 +1300,16 @@ async def test_evaluate_is_absent_when_v2_is_disabled():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "scope", ["full", "reported", "negotiation", "ownership", "trainer", "trainer_without_preparation"]
+    "scope",
+    [
+        "full",
+        "substantive",
+        "reported",
+        "negotiation",
+        "ownership",
+        "trainer",
+        "trainer_without_preparation",
+    ],
 )
 @pytest.mark.skipif(
     os.environ.get("ARENA_RUN_LIVE_V2") != "1", reason="Explicit live opt-in required"
@@ -1075,6 +1323,35 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
     monkeypatch.setenv("ARENA_QWEN_MODEL", model_id)
     monkeypatch.setenv("ARENA_RETRIEVAL_TIMEOUT_SECONDS", "2")
     body = evaluate_body()
+    if scope == "substantive":
+        body = {
+            "role": "Менеджер",
+            "opponent_role": "Генеральный директор",
+            "case_description": "Переговоры о повышении после пропущенного рабочего дня.",
+            "messages": [
+                {
+                    "text": "Я не предупредил об отсутствии вчера — это моя ошибка. Предлагаю компенсировать пропуск: сегодня отправлю клиентам отчёты и буду еженедельно сообщать о выполнении плана. Прошу вернуться к обсуждению повышения.",
+                    "is_ai": False,
+                },
+                {
+                    "text": "Мне нужно понимать, что пропуск не повторится. Какие конкретно условия и сроки контроля вы предлагаете?",
+                    "is_ai": True,
+                },
+                {
+                    "text": "Согласен уведомлять вас о форс-мажоре сразу. Предлагаю две недели контроля, KPI 120% и еженедельный отчёт. Если выполню условия, прошу оформить повышение без новых требований.",
+                    "is_ai": False,
+                },
+                {
+                    "text": "Согласен: две недели контроля, KPI 120%, еженедельный отчёт и своевременное уведомление. Если условия выполнены, оформим повышение. За вчерашний пропуск пришлите объяснение сегодня.",
+                    "is_ai": True,
+                },
+                {
+                    "text": "Пришлю объяснение сегодня. Подтверждаю две недели контроля, KPI 120%, еженедельный отчёт и повышение при выполнении этих условий.",
+                    "is_ai": False,
+                },
+            ],
+            "preparations": "Моя цель — согласовать измеримые условия повышения и сохранить рабочие отношения.",
+        }
     if scope == "reported":
         body = {
             "role": "Менеджер",
@@ -1114,7 +1391,7 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
                 college == scope or "[V2_EVALUATE_COMMENT_GROUNDING]" in system
             )
             if (
-                scope in ("full", "reported")
+                scope in ("full", "substantive", "reported")
                 or selected_judge
                 or (scope.startswith("trainer") and "[V2_EVALUATE_TRAINER" in system)
             ):
@@ -1155,7 +1432,7 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
             httpx.AsyncClient(
                 transport=httpx.MockTransport(
                     RetrievalGateway()
-                    if scope in ("full", "reported", "negotiation", "ownership")
+                    if scope in ("full", "substantive", "reported", "negotiation", "ownership")
                     else lambda req: httpx.Response(503)
                 )
             ) as retrieval,
@@ -1194,7 +1471,7 @@ async def test_live_evaluate_short_dialogue_returns_verified_assessment(monkeypa
             indent=2,
         )
         return
-    if scope == "full":
+    if scope in ("full", "substantive"):
         assert result["outcome"]["status"] == "ready", diagnostic
         assert result["outcome"]["assessment"]["kind"] == "agreement", diagnostic
         assert all(slot["status"] == "ready" for slot in result["judge_verdicts"]), json.dumps(
