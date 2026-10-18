@@ -8,6 +8,7 @@ import httpx
 from arena_ai.qwen import JSON_FENCE
 from arena_ai.v2.budget import current_budget
 from arena_ai.v2.contracts import Contract
+from arena_ai.v2.metrics import count_model_call, count_usage
 
 JSON_BLOCK = re.compile(r"```json[ \t]*\r?\n(.*?)\r?\n```", re.DOTALL)
 
@@ -71,10 +72,13 @@ class JsonChat:
         if self.json_mode == "json_object":
             body["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        count_model_call()
         try:
             response = await self.http.post(self.chat_url, json=body, headers=headers)
             response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
+            payload = response.json()
+            count_usage(payload)
+            content = payload["choices"][0]["message"]["content"]
             if not isinstance(content, str):
                 raise TypeError("Model content must be text")
             fenced = JSON_FENCE.fullmatch(content.strip())

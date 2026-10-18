@@ -187,7 +187,7 @@ def judge_example(college):
     }
 
 
-async def send_evaluation(monkeypatch, gateway, body=None, retrieval_fault=None):
+async def send_evaluation(monkeypatch, gateway, body=None, retrieval_fault=None, headers=HEADERS):
     configure(monkeypatch)
     monkeypatch.setenv("ARENA_RETRIEVAL_TIMEOUT_SECONDS", "2")
     async with (
@@ -201,7 +201,7 @@ async def send_evaluation(monkeypatch, gateway, body=None, retrieval_fault=None)
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
             return await client.post(
-                "/v2/evaluate", json=body if body is not None else evaluate_body(), headers=HEADERS
+                "/v2/evaluate", json=body if body is not None else evaluate_body(), headers=headers
             )
 
 

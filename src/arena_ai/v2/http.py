@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Request, Security
@@ -17,6 +18,7 @@ from arena_ai.v2.evaluation_response import EvaluationResponse
 from arena_ai.v2.finish import analyze_finish
 from arena_ai.v2.finish_response import FinishResponse
 from arena_ai.v2.judges import judge_finish
+from arena_ai.v2.metrics import record_evaluation
 from arena_ai.v2.preparation import (
     PreparationReviewRequest,
     PreparationReviewResponse,
@@ -36,6 +38,7 @@ def install_turn_route(
     validation = os.environ.get("ARENA_EVALUATE_VALIDATION", "strict")
     if validation not in ("strict", "soft"):
         raise ValueError("ARENA_EVALUATE_VALIDATION must be strict or soft")
+    metrics_file = Path(path) if (path := os.environ.get("ARENA_METRICS_FILE")) else None
 
     def error(status: int, code: str, message: str) -> JSONResponse:
         return JSONResponse(
@@ -63,12 +66,18 @@ def install_turn_route(
             request = EvaluationRequest.model_validate_json(await raw.body())
         except ValueError:
             return error(422, "invalid_request", "Invalid evaluation request")
-        result = await evaluate_dialogue(
+        result = await record_evaluation(
+            metrics_file,
             request,
-            pipeline.analysis,
-            pipeline.judge,
-            retrieval,
-            strict=validation == "strict",
+            lambda: evaluate_dialogue(
+                request,
+                pipeline.analysis,
+                pipeline.judge,
+                retrieval,
+                strict=validation == "strict",
+            ),
+            validation=validation,
+            model=pipeline.analysis.model,
         )
         return Response(result.model_dump_json(), media_type="application/json")
 

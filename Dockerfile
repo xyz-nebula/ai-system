@@ -13,6 +13,8 @@ LABEL org.opencontainers.image.revision=$ARENA_SOURCE_REVISION
 WORKDIR /opt/arena
 ENV PATH=/opt/arena/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY --from=build /opt/arena/.venv ./.venv
+# A fresh named volume copies this owner, so the read-only container can append measurements.
+RUN mkdir -p /var/lib/arena/metrics && chown 10001:10001 /var/lib/arena/metrics
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "arena_ai.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
