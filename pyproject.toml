@@ -14,6 +14,7 @@ dependencies = [
 arena-ai = "arena_ai.cli:main"
 arena-ai-eval = "arena_ai.live_eval:main"
 arena-ai-index = "arena_ai.index_corpus:main"
+arena-ai-metrics = "arena_ai.metrics_report:main"
 
 [dependency-groups]
 dev = [

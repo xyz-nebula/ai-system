@@ -13,6 +13,10 @@ services:
       ARENA_V2_ENABLED: "true"
       ARENA_QDRANT_URL: http://qdrant:6333
       ARENA_EMBEDDINGS_URL: http://embeddings:80
+      # Замеры оценки (без текста поединков); пустое ARENA_METRICS_FILE= в .env выключает.
+      ARENA_METRICS_FILE: ${ARENA_METRICS_FILE-/var/lib/arena/metrics/evaluations.jsonl}
+    volumes:
+      - metrics:/var/lib/arena/metrics
     ports:
       - "${ARENA_BIND_IP:-127.0.0.1}:${ARENA_PORT:-8000}:8000"
     extra_hosts:
@@ -87,3 +91,4 @@ volumes:
     name: arena-rag_qdrant_data
   embeddings_cache:
     name: arena-rag_embeddings_cache
+  metrics:

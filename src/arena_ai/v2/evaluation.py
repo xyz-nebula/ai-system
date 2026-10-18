@@ -38,6 +38,13 @@ from arena_ai.v2.evaluation_response import (
     EvaluationTrainerSlot,
     IndexedEvidence,
 )
+from arena_ai.v2.metrics import (
+    QuoteBinding,
+    count_binding,
+    count_dropped,
+    count_redraft,
+    measured_slot,
+)
 from arena_ai.v2.trainer import TRAINER
 from arena_ai.v2.trainer import VERIFY as TRAINER_VERIFY
 
@@ -421,6 +428,17 @@ def map_evidence[T: Contract](value: T, change: Callable[[IndexedEvidence], Inde
     return cast(T, walk(value))
 
 
+def collect_quotes(value: Contract) -> list[IndexedEvidence]:
+    found: list[IndexedEvidence] = []
+
+    def keep(proof: IndexedEvidence) -> IndexedEvidence:
+        found.append(proof)
+        return proof
+
+    map_evidence(value, keep)
+    return found
+
+
 def ground_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
     """Replace each locatable model quote with the exact transcript span it stands for.
 
@@ -432,33 +450,45 @@ def ground_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
         if proof.message_index >= len(dialogue.messages):
             return proof
         span = locate_quote(proof.quote, dialogue.messages[proof.message_index].text)
-        return proof if span is None else proof.model_copy(update={"quote": span})
+        if span is None:
+            return proof
+        count_binding("exact")
+        return proof.model_copy(update={"quote": span})
 
     return map_evidence(value, ground)
 
 
-def repair_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
-    """Soft mode: point every quote at a real transcript span instead of rejecting it.
+def bind_quote(
+    proof: IndexedEvidence, dialogue: EvaluationDialogue
+) -> tuple[IndexedEvidence, QuoteBinding]:
+    """Soft mode: point a quote at a real transcript span instead of rejecting it.
 
     The nearest message containing the quote wins; otherwise the start of the cited
     (or last) message is used. Published quotes are always exact, correctly
     attributed transcript text, never model wording.
     """
+    messages = dialogue.messages
+    for entry in sorted(messages, key=lambda entry: abs(entry.message_index - proof.message_index)):
+        span = locate_quote(proof.quote, entry.text)
+        if span is not None:
+            bound = IndexedEvidence(
+                message_index=entry.message_index, is_ai=entry.is_ai, quote=span
+            )
+            return bound, "exact" if entry.message_index == proof.message_index else "moved"
+    entry = messages[min(proof.message_index, len(messages) - 1)]
+    substitute = IndexedEvidence(
+        message_index=entry.message_index, is_ai=entry.is_ai, quote=entry.text
+    )
+    return compact_proof(substitute), "substituted"
+
+
+def repair_evidence[T: Contract](value: T, dialogue: EvaluationDialogue) -> T:
+    """Bind every quote in a soft-mode draft whose quotes are all published."""
 
     def repair(proof: IndexedEvidence) -> IndexedEvidence:
-        messages = dialogue.messages
-        for entry in sorted(
-            messages, key=lambda entry: abs(entry.message_index - proof.message_index)
-        ):
-            span = locate_quote(proof.quote, entry.text)
-            if span is not None:
-                return IndexedEvidence(
-                    message_index=entry.message_index, is_ai=entry.is_ai, quote=span
-                )
-        entry = messages[min(proof.message_index, len(messages) - 1)]
-        return compact_proof(
-            IndexedEvidence(message_index=entry.message_index, is_ai=entry.is_ai, quote=entry.text)
-        )
+        bound, binding = bind_quote(proof, dialogue)
+        count_binding(binding)
+        return bound
 
     return map_evidence(value, repair)
 
@@ -638,6 +668,8 @@ async def assess_judge(
             for attempt in (1, 2):
                 stage = "generate"
                 rejection: list[str] = []
+                if attempt == 2:
+                    count_redraft()
                 try:
                     draft = await model.complete(
                         EVALUATION_JUDGE if revision is None else EVALUATION_JUDGE + JUDGE_REVISION,
@@ -864,6 +896,8 @@ async def assess_trainer(
             system = EVALUATION_TRAINER
             for attempt in (1, 2):
                 stage = "generate"
+                if attempt == 2:
+                    count_redraft()
                 try:
                     draft = await model.complete(system, context, EvaluationTrainerDraft)
                     feedback = ground_preparation(
@@ -910,6 +944,7 @@ async def draft_twice[T: Contract](
         return await model.complete(system, context, response_type)
     except ModelOutputError as error:
         log_evaluation_failure(slot, "generate", error)
+        count_redraft()
         return await model.complete(system, context, response_type)
 
 
@@ -937,13 +972,16 @@ def soft_verdict(
     def role(proof: IndexedEvidence) -> str:
         return dialogue.opponent_role if proof.is_ai else dialogue.player_role
 
-    episode = draft.evidence
-    reaction = draft.effect_evidence
-    if (
-        reaction is None
-        or reaction.message_index <= episode.message_index
-        or reaction.is_ai == episode.is_ai
-    ):
+    # Bind only the quotes this verdict publishes, so unused draft quotes are not counted.
+    episode, binding = bind_quote(draft.evidence, dialogue)
+    bindings = [binding]
+    reaction = None
+    if draft.effect_evidence is not None:
+        candidate, binding = bind_quote(draft.effect_evidence, dialogue)
+        if candidate.message_index > episode.message_index and candidate.is_ai != episode.is_ai:
+            reaction = candidate
+            bindings.append(binding)
+    if reaction is None:
         reaction = next(
             (
                 IndexedEvidence(
@@ -962,9 +1000,15 @@ def soft_verdict(
         effect = "После этой реплики в диалоге высказывалась только та же роль."
     preferred = dialogue.player_role if draft.choice == "player" else dialogue.opponent_role
     parts = [f"Мой выбор по критерию «{draft.decisive_criterion}» — роль «{preferred}»."]
-    compared = [
+    compared = []
+    for proof in [
         proof for proof in (draft.player_evidence, draft.opponent_evidence) if proof is not None
-    ] or draft.comparison_evidence
+    ] or draft.comparison_evidence:
+        bound, binding = bind_quote(proof, dialogue)
+        compared.append(bound)
+        bindings.append(binding)
+    for binding in bindings:
+        count_binding(binding)
     if compared:
         quotes = "; ".join(f"{role(proof)}: «{compact_proof(proof).quote}»" for proof in compared)
         parts.append(f"Сравнение реплик: {quotes}.")
@@ -1004,7 +1048,7 @@ async def soft_judge(
             draft = await draft_twice(
                 college, model, EVALUATION_JUDGE, context, judge_response_type(college)
             )
-            verdict = soft_verdict(college, repair_evidence(draft, dialogue), dialogue)
+            verdict = soft_verdict(college, draft, dialogue)
             return EvaluationJudgeSlot(
                 college=college, status="ready", verdict=verdict, error_code=None
             )
@@ -1040,7 +1084,7 @@ def soften_trainer(
     if goal.goal_text is None and goal.status != "not_assessable":
         # Without a written personal goal the contract allows only not_assessable.
         goal = goal.model_copy(update={"status": "not_assessable"})
-    return feedback.model_copy(
+    softened = feedback.model_copy(
         update={
             "strengths": user_points(feedback.strengths),
             "mistakes": user_points(feedback.mistakes),
@@ -1048,6 +1092,8 @@ def soften_trainer(
             "goal_assessment": goal,
         }
     )
+    count_dropped(len(collect_quotes(feedback)) - len(collect_quotes(softened)))
+    return softened
 
 
 async def soft_trainer(context: EvaluationTrainerContext, model: JsonChat) -> EvaluationTrainerSlot:
@@ -1097,7 +1143,8 @@ async def evaluate_dialogue(
             for index, entry in enumerate(request.messages)
         ],
     )
-    outcome = await (assess_outcome if strict else soft_outcome)(dialogue, model)
+    with measured_slot("outcome"):
+        outcome = await (assess_outcome if strict else soft_outcome)(dialogue, model)
     verdicts = []
     for college in COLLEGES:
         if {entry.is_ai for entry in dialogue.messages} != {True, False}:
@@ -1110,12 +1157,15 @@ async def evaluate_dialogue(
                 )
             )
         else:
-            verdicts.append(
-                await assess_judge(college, dialogue, judge, model, retrieval)
-                if strict
-                else await soft_judge(college, dialogue, judge, retrieval)
-            )
-    trainer = await (assess_trainer if strict else soft_trainer)(
-        EvaluationTrainerContext(**dialogue.model_dump(), preparation=request.preparations), model
-    )
+            with measured_slot(college):
+                verdicts.append(
+                    await assess_judge(college, dialogue, judge, model, retrieval)
+                    if strict
+                    else await soft_judge(college, dialogue, judge, retrieval)
+                )
+    with measured_slot("trainer"):
+        trainer = await (assess_trainer if strict else soft_trainer)(
+            EvaluationTrainerContext(**dialogue.model_dump(), preparation=request.preparations),
+            model,
+        )
     return EvaluationResponse(outcome=outcome, judge_verdicts=verdicts, trainer_feedback=trainer)
